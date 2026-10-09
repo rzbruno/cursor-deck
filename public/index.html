@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Cursor Agent — Mobile Control Panel</title>
+  <meta name="description" content="Self-hosted mobile-first control panel for driving Cursor CLI headlessly across projects over private Tailscale network.">
+  <meta name="theme-color" content="#090c15">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Cursor Agent">
+  <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
+  <link rel="apple-touch-icon" href="/icons/icon.svg">
+  <link rel="manifest" href="/manifest.json">
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Top Header & App Bar -->
+    <header class="app-header">
+      <div class="header-top">
+        <div class="brand-section">
+          <div class="brand-logo" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h1 class="brand-title">Cursor Agent</h1>
+        </div>
+
+        <div class="header-actions">
+          <!-- Connection / Tailscale status pill -->
+          <button id="statusPill" class="status-pill" title="Network Connection Status" aria-label="Network status">
+            <span class="pulse-dot"></span>
+            <span id="statusText">Connecting...</span>
+          </button>
+
+          <!-- Keep Screen Awake button -->
+          <button id="wakeLockBtn" class="icon-btn" title="Keep Screen Awake (Wake Lock)" aria-label="Toggle screen wake lock">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          </button>
+
+          <!-- QR Code button -->
+          <button id="qrBtn" class="icon-btn" title="Show Phone QR Code" aria-label="Show phone connection QR code">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Scoped Project Switcher Bar -->
+      <div id="projectSelectorBar" class="project-selector-bar" role="button" tabindex="0" aria-label="Select target project">
+        <div class="project-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <div class="project-info">
+          <span id="currentProjectName" class="project-name">Loading projects...</span>
+          <div class="project-meta-badges">
+            <span id="branchBadge" class="badge badge-branch">main</span>
+            <span id="dirtyBadge" class="badge badge-clean" style="display:none;">Clean</span>
+          </div>
+        </div>
+        <span class="dropdown-arrow">▼</span>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs" aria-label="Navigation Tabs">
+      <button class="tab-btn active" data-tab="console" id="tabConsoleBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        <span>Console</span>
+      </button>
+
+      <button class="tab-btn" data-tab="status" id="tabStatusBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/></svg>
+        <span>Git Status</span>
+      </button>
+
+      <button class="tab-btn" data-tab="diff" id="tabDiffBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+        <span>Git Diff</span>
+      </button>
+    </nav>
+
+    <!-- Main View Panels -->
+    <main class="main-view">
+      <!-- PANEL 1: CONSOLE & SSE STREAM -->
+      <section id="consolePanel" class="tab-panel active" aria-labelledby="tabConsoleBtn">
+        <div class="console-panel">
+          <!-- Active running task banner -->
+          <div id="activeTaskBanner" class="active-task-banner" role="status">
+            <div class="banner-left">
+              <div class="banner-spinner"></div>
+              <span id="bannerPromptText" class="banner-text">Executing Cursor Agent...</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="bannerTimer" class="banner-timer">00:00</span>
+              <button id="abortBtn" class="banner-abort-btn" title="Immediate Process Abort" aria-label="Abort running task">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                <span>ABORT</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Terminal Container -->
+          <div class="terminal-container">
+            <div class="terminal-header">
+              <div class="terminal-title">
+                <span style="color:#6ee7b7">●</span> LIVE SSE OUTPUT
+              </div>
+              <div class="terminal-controls">
+                <button id="toggleWrapBtn" class="tool-btn" title="Toggle Wrap">Wrap</button>
+                <button id="copyLogsBtn" class="tool-btn" title="Copy Output">Copy</button>
+                <button id="clearLogsBtn" class="tool-btn" title="Clear Output">Clear</button>
+              </div>
+            </div>
+
+            <!-- Terminal Output Feed -->
+            <div id="terminalOutput" class="terminal-output" aria-live="polite" role="log"></div>
+
+            <!-- Jump to Bottom pill -->
+            <button id="jumpBottomBtn" class="jump-bottom-btn" aria-label="Jump to latest output">
+              <span>↓ Follow live</span>
+              <span id="unreadCount" class="badge badge-branch">0</span>
+            </button>
+          </div>
+
+          <!-- Bottom Sticky Prompt Dock -->
+          <footer class="prompt-dock">
+            <div class="prompt-options-row">
+              <!-- Continuation Toggle Switch -->
+              <div id="continueToggle" class="toggle-chip" title="Toggle --continue flag" role="switch" aria-checked="false">
+                <span class="toggle-switch"></span>
+                <span>Continue Session</span>
+                <span id="turnCountBadge" class="badge badge-branch" style="display:none;">Turn 1</span>
+              </div>
+
+              <!-- Execution Mode Selector -->
+              <div class="mode-selector">
+                <button class="mode-option" data-mode="plan" title="Plan only (no edits)">Plan</button>
+                <button class="mode-option" data-mode="ask" title="Ask question only">Ask</button>
+              </div>
+            </div>
+
+            <div class="prompt-input-row">
+              <textarea
+                id="promptTextarea"
+                class="prompt-textarea"
+                placeholder="Give Cursor Agent an instruction..."
+                rows="1"
+                aria-label="Prompt input"
+              ></textarea>
+              <button id="sendBtn" class="send-btn" title="Run Agent" aria-label="Run Cursor Agent">
+                <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+              </button>
+            </div>
+          </footer>
+        </div>
+      </section>
+
+      <!-- PANEL 2: GIT STATUS & LOCAL CONTROLS -->
+      <section id="statusPanel" class="tab-panel" aria-labelledby="tabStatusBtn">
+        <div class="git-panel">
+          <!-- Git Header & Branch Card -->
+          <div class="git-header-card">
+            <div class="git-branch-info">
+              <span id="gitBranchName" class="git-branch-title">🌿 main</span>
+              <button id="refreshGitBtn" class="tool-btn">↻ Refresh</button>
+            </div>
+
+            <div class="git-stats-summary">
+              <span id="statStaged" class="stat-pill stat-staged">0 staged</span>
+              <span id="statModified" class="stat-pill stat-modified">0 modified</span>
+              <span id="statUntracked" class="stat-pill stat-untracked">0 untracked</span>
+            </div>
+
+            <div class="git-quick-actions">
+              <button id="stageAllBtn" class="action-btn">Stage All</button>
+              <button id="unstageAllBtn" class="action-btn">Unstage All</button>
+            </div>
+          </div>
+
+          <!-- Local Commit Card -->
+          <div class="commit-box">
+            <span class="commit-title">Local Checkpoint Commit (No remote needed)</span>
+            <input id="commitMessageInput" class="commit-input" type="text" placeholder="Commit message (e.g. checkpoint after Cursor task)">
+            <button id="commitBtn" class="commit-btn">Commit Locally</button>
+          </div>
+
+          <!-- File List -->
+          <div class="file-list-card">
+            <div class="file-list-header">
+              <span>Changed Files (Tap to inspect diff)</span>
+            </div>
+            <div id="gitFileList"></div>
+          </div>
+
+          <!-- Emergency Discard Danger Card -->
+          <div class="emergency-card">
+            <div class="emergency-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <span>Emergency Discard</span>
+            </div>
+            <p class="emergency-desc">
+              Discard all uncommitted changes and delete untracked files generated by the Cursor CLI. Operates strictly on local files: <code>git reset --hard HEAD &amp;&amp; git clean -fd</code>.
+            </p>
+            <button id="emergencyDiscardBtn" class="emergency-btn">
+              <span>⚠️ Discard All Local Changes</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- PANEL 3: GIT DIFF VIEW -->
+      <section id="diffPanel" class="tab-panel" aria-labelledby="tabDiffBtn">
+        <div class="diff-panel">
+          <div class="diff-toolbar">
+            <span id="diffStats" class="diff-stats">Calculating diff...</span>
+            <button id="refreshDiffBtn" class="tool-btn">↻ Refresh</button>
+          </div>
+          <div id="diffContainer"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Project Selector Bottom Sheet Modal -->
+    <div id="projectModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="projectSheetTitle">
+      <div class="modal-sheet">
+        <div class="sheet-header">
+          <span id="projectSheetTitle" class="sheet-title">Select Target Project</span>
+          <button id="closeProjectModalBtn" class="sheet-close-btn" aria-label="Close project modal">✕</button>
+        </div>
+        <div class="sheet-search">
+          <input id="projectSearchInput" class="search-input" type="search" placeholder="Filter projects (e.g. jettacargo, routing)...">
+        </div>
+        <div style="padding: 6px 16px; display:flex; justify-content: flex-end;">
+          <button id="refreshProjectsListBtn" class="tool-btn">↻ Refresh Folders</button>
+        </div>
+        <div id="projectListContainer" class="sheet-content"></div>
+      </div>
+    </div>
+
+    <!-- QR Code Modal -->
+    <div id="qrModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="qrSheetTitle">
+      <div class="dialog-card">
+        <div class="sheet-header" style="padding:0 0 10px 0;">
+          <span id="qrSheetTitle" class="sheet-title">Scan on Android Device</span>
+          <button id="closeQrModalBtn" class="sheet-close-btn" aria-label="Close QR modal">✕</button>
+        </div>
+        <div class="qr-container">
+          <img id="qrImage" class="qr-image" alt="QR Code for phone connection">
+          <p id="qrUrlText" class="qr-url-text"></p>
+          <p style="font-size:0.75rem;color:var(--text-muted);text-align:center;">
+            Open over your private Tailscale network. No SSH, Termux, or public port forwarding required.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Emergency Discard Confirmation Modal -->
+    <div id="discardModal" class="dialog-overlay" role="dialog" aria-modal="true" aria-labelledby="discardDialogTitle">
+      <div class="dialog-card">
+        <div class="emergency-title" id="discardDialogTitle">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span>Confirm Emergency Discard</span>
+        </div>
+        <p style="font-size:0.84rem;color:#cbd5e1;line-height:1.5;">
+          Are you sure you want to discard <strong>all changes</strong> in this project?
+        </p>
+        <p style="font-size:0.76rem;color:#fca5a5;background:rgba(239,68,68,0.1);padding:8px 10px;border-radius:6px;border:1px solid rgba(239,68,68,0.2);">
+          This executes: <code>git reset --hard HEAD</code> and <code>git clean -fd</code>. All uncommitted work made by the Cursor Agent will be permanently deleted.
+        </p>
+        <div class="dialog-buttons">
+          <button id="cancelDiscardBtn" class="btn-secondary">Cancel</button>
+          <button id="confirmDiscardBtn" class="btn-danger">Yes, Discard All</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
