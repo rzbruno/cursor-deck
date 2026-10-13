@@ -146,7 +146,7 @@ export class ProjectManager {
           const readmeHeading = `# ${cleanName}\n\n`;
           const readmeBody = description.trim()
             ? `${description.trim()}\n`
-            : `Project initialized via Cursor Agent Mobile Control Panel.\n`;
+            : `Project initialized via Cursor Deck.\n`;
           await fs.writeFile(path.join(resolvedPath, 'README.md'), readmeHeading + readmeBody, 'utf8');
 
           if (initialCommit) {
@@ -155,9 +155,9 @@ export class ProjectManager {
               cwd: resolvedPath,
               env: {
                 ...process.env,
-                GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME || 'Cursor Agent',
+                GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME || 'Cursor Deck',
                 GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL || 'agent@cursor.local',
-                GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME || 'Cursor Agent',
+                GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME || 'Cursor Deck',
                 GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL || 'agent@cursor.local'
               }
             });

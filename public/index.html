@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Cursor Agent — Mobile Control Panel</title>
-  <meta name="description" content="Self-hosted mobile-first control panel for driving Cursor CLI headlessly across projects over private Tailscale network.">
+  <title>Cursor Deck — Mobile Control Panel</title>
+  <meta name="description" content="Self-hosted mobile-first control deck for driving Cursor CLI headlessly across projects over private Tailscale network.">
   <meta name="theme-color" content="#090c15">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Cursor Agent">
+  <meta name="apple-mobile-web-app-title" content="Cursor Deck">
   <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
   <link rel="apple-touch-icon" href="/icons/icon.svg">
   <link rel="manifest" href="/manifest.json">
@@ -29,7 +29,7 @@
           <div class="brand-logo" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
-          <h1 class="brand-title">Cursor Agent</h1>
+          <h1 class="brand-title">Cursor Deck</h1>
         </div>
 
         <div class="header-actions">
@@ -94,7 +94,8 @@
           <div id="activeTaskBanner" class="active-task-banner" role="status">
             <div class="banner-left">
               <div class="banner-spinner"></div>
-              <span id="bannerPromptText" class="banner-text">Executing Cursor Agent...</span>
+              <span id="bannerModeBadge" class="mode-badge mode-badge-agent">AGENT</span>
+              <span id="bannerPromptText" class="banner-text">Executing Cursor Deck...</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
               <span id="bannerTimer" class="banner-timer">00:00</span>
@@ -139,9 +140,16 @@
               </div>
 
               <!-- Execution Mode Selector -->
-              <div class="mode-selector">
-                <button class="mode-option" data-mode="plan" title="Plan only (no edits)">Plan</button>
-                <button class="mode-option" data-mode="ask" title="Ask question only">Ask</button>
+              <div class="mode-selector" role="group" aria-label="Execution Mode">
+                <button class="mode-option active" data-mode="agent" title="Agent mode: full autonomous edits, terminal commands & tests">
+                  <span class="mode-dot"></span>Agent
+                </button>
+                <button class="mode-option" data-mode="plan" title="Plan mode: formulate step-by-step roadmap without editing files">
+                  <span class="mode-dot"></span>Plan
+                </button>
+                <button class="mode-option" data-mode="ask" title="Ask mode: read-only codebase explanations and Q&A">
+                  <span class="mode-dot"></span>Ask
+                </button>
               </div>
             </div>
 
@@ -149,11 +157,11 @@
               <textarea
                 id="promptTextarea"
                 class="prompt-textarea"
-                placeholder="Give Cursor Agent an instruction..."
+                placeholder="Give Cursor Deck an instruction..."
                 rows="1"
                 aria-label="Prompt input"
               ></textarea>
-              <button id="sendBtn" class="send-btn" title="Run Agent" aria-label="Run Cursor Agent">
+              <button id="sendBtn" class="send-btn" title="Run Task" aria-label="Run Cursor Deck">
                 <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
               </button>
             </div>
@@ -347,7 +355,7 @@
           Are you sure you want to discard <strong>all changes</strong> in this project?
         </p>
         <p style="font-size:0.76rem;color:#fca5a5;background:rgba(239,68,68,0.1);padding:8px 10px;border-radius:6px;border:1px solid rgba(239,68,68,0.2);">
-          This executes: <code>git reset --hard HEAD</code> and <code>git clean -fd</code>. All uncommitted work made by the Cursor Agent will be permanently deleted.
+          This executes: <code>git reset --hard HEAD</code> and <code>git clean -fd</code>. All uncommitted work will be permanently deleted.
         </p>
         <div class="dialog-buttons">
           <button id="cancelDiscardBtn" class="btn-secondary">Cancel</button>

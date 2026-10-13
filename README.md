@@ -1,6 +1,6 @@
-# ⚡ Cursor Agent — Mobile Web Control Panel
+# ⚡ Cursor Deck — Mobile Web Control Panel
 
-A self-hosted, mobile-first web control panel running on your laptop that lets you drive the **Cursor CLI (`agent`)** across your projects directly from an Android browser, without touching SSH or Termux.
+A self-hosted, mobile-first web control deck running on your laptop that lets you drive the **Cursor CLI (`agent`)** across your projects directly from an Android browser, without touching SSH or Termux.
 
 ---
 
@@ -46,11 +46,11 @@ A self-hosted, mobile-first web control panel running on your laptop that lets y
 ### 1. Installation
 Clone or navigate to this directory and install dependencies:
 ```bash
-cd ~/code/cursor-agent
+cd ~/code/cursor-deck
 npm install
 ```
 
-### 2. Launch the Control Panel
+### 2. Launch the Control Deck
 ```bash
 # Start with standard settings (auto-detects Tailscale IP and ~/code)
 npm start
@@ -58,12 +58,12 @@ npm start
 
 Or run via the CLI executable directly:
 ```bash
-./bin/cursor-agent-web.js
+./bin/cursor-deck.js
 ```
 
 ### 3. CLI Options & Flags
 ```bash
-./bin/cursor-agent-web.js [options]
+./bin/cursor-deck.js [options]
 
 Options:
   -p, --port <number>      HTTP port to listen on (default: 4040, env: PORT)
@@ -77,14 +77,14 @@ Options:
 
 #### Example: Tailscale-Only Mode with Auth Token
 ```bash
-node bin/cursor-agent-web.js --tailscale-only --token mysecretpass
+node bin/cursor-deck.js --tailscale-only --token mysecretpass
 ```
 
 ---
 
 ## 📱 Connecting from Android
 
-1. Open your terminal where `cursor-agent-web` is running.
+1. Open your terminal where `cursor-deck` is running.
 2. Scan the ASCII QR code printed in the terminal with your Android camera.
 3. Your browser will open:
    ```text
@@ -106,9 +106,10 @@ npm test
 ## 🛠️ Architecture
 
 ```
-cursor-agent/
+cursor-deck/
 ├── bin/
-│   └── cursor-agent-web.js       # CLI launcher, terminal banner & QR generator
+│   ├── cursor-deck.js            # CLI launcher, terminal banner & QR generator
+│   └── cursor-agent-web.js       # Backwards-compatibility wrapper
 ├── src/
 │   ├── server.js                 # HTTP server, REST router, SSE endpoint & static file server
 │   ├── tailscale.js              # Tailscale CGNAT subnet validation & IP extraction

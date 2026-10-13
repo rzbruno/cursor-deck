@@ -1,24 +1,26 @@
 {
-  "name": "cursor-agent-control-panel",
+  "name": "cursor-deck",
   "version": "1.0.0",
-  "description": "Self-hosted, mobile-first web control panel for driving the Cursor CLI across projects over Tailscale",
+  "description": "Self-hosted, mobile-first web control deck for driving the Cursor CLI across projects over Tailscale",
   "main": "src/server.js",
   "type": "module",
   "bin": {
-    "cursor-agent-web": "./bin/cursor-agent-web.js"
+    "cursor-deck": "./bin/cursor-deck.js",
+    "cursor-agent-web": "./bin/cursor-deck.js"
   },
   "scripts": {
-    "start": "node bin/cursor-agent-web.js",
-    "dev": "node bin/cursor-agent-web.js",
+    "start": "node bin/cursor-deck.js",
+    "dev": "node bin/cursor-deck.js",
     "test": "node --test"
   },
   "keywords": [
     "cursor",
+    "cursor-deck",
     "cursor-agent",
     "tailscale",
     "mobile",
     "git",
-    "control-panel"
+    "control-deck"
   ],
   "author": "",
   "license": "MIT",

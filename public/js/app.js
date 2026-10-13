@@ -1,13 +1,14 @@
 /**
- * Cursor Agent Mobile Control Panel — Client Application
+ * Cursor Deck Mobile Control Panel — Client Application
  */
 
-class CursorAgentApp {
+class CursorDeckApp {
   constructor() {
     this.currentProject = null;
     this.projects = [];
     this.continueSession = false;
-    this.currentMode = null; // null | 'plan' | 'ask'
+    const savedMode = localStorage.getItem('cursor_execution_mode');
+    this.currentMode = (savedMode && ['agent', 'plan', 'ask'].includes(savedMode)) ? savedMode : 'agent';
     this.eventSource = null;
     this.lastEventId = 0;
     this.isAutoScrollEnabled = true;
@@ -44,6 +45,7 @@ class CursorAgentApp {
     this.jumpBottomBtn = document.getElementById('jumpBottomBtn');
     this.unreadCountEl = document.getElementById('unreadCount');
     this.activeTaskBanner = document.getElementById('activeTaskBanner');
+    this.bannerModeBadge = document.getElementById('bannerModeBadge');
     this.bannerPromptText = document.getElementById('bannerPromptText');
     this.bannerTimer = document.getElementById('bannerTimer');
     this.abortBtn = document.getElementById('abortBtn');
@@ -231,13 +233,7 @@ class CursorAgentApp {
     this.modeButtons.forEach(btn => {
       btn.addEventListener('click', () => {
         const mode = btn.dataset.mode;
-        this.modeButtons.forEach(b => b.classList.remove('active'));
-        if (this.currentMode === mode) {
-          this.currentMode = null; // Toggle off
-        } else {
-          this.currentMode = mode;
-          btn.classList.add('active');
-        }
+        this.setMode(mode);
       });
     });
 
@@ -302,6 +298,7 @@ class CursorAgentApp {
   }
 
   async initApp() {
+    this.updateModeUI();
     await this.checkNetworkStatus();
     await this.loadProjects();
 
@@ -677,8 +674,48 @@ class CursorAgentApp {
     }
   }
 
+  setMode(mode) {
+    if (!['agent', 'plan', 'ask'].includes(mode)) {
+      mode = 'agent';
+    }
+    this.currentMode = mode;
+    localStorage.setItem('cursor_execution_mode', mode);
+    this.updateModeUI();
+  }
+
+  updateModeUI() {
+    this.modeButtons.forEach(btn => {
+      if (btn.dataset.mode === this.currentMode) {
+        btn.classList.add('active');
+        btn.setAttribute('aria-pressed', 'true');
+      } else {
+        btn.classList.remove('active');
+        btn.setAttribute('aria-pressed', 'false');
+      }
+    });
+
+    if (this.currentMode === 'plan') {
+      this.promptTextarea.placeholder = 'Describe feature to plan (Cursor outlines roadmap without editing files)...';
+      this.sendBtn.title = 'Run Plan';
+      this.sendBtn.setAttribute('aria-label', 'Run Plan');
+    } else if (this.currentMode === 'ask') {
+      this.promptTextarea.placeholder = 'Ask a question about this repository (read-only)...';
+      this.sendBtn.title = 'Ask Question';
+      this.sendBtn.setAttribute('aria-label', 'Ask Question');
+    } else {
+      this.promptTextarea.placeholder = 'Instruct Cursor Deck (autonomous edits, commands, tests)...';
+      this.sendBtn.title = 'Run Task';
+      this.sendBtn.setAttribute('aria-label', 'Run Cursor Deck');
+    }
+  }
+
   showActiveTask(task) {
     this.activeTaskBanner.classList.add('visible');
+    const mode = (task.mode || 'agent').toLowerCase();
+    if (this.bannerModeBadge) {
+      this.bannerModeBadge.textContent = mode.toUpperCase();
+      this.bannerModeBadge.className = `mode-badge mode-badge-${mode}`;
+    }
     this.bannerPromptText.textContent = task.prompt || 'Running task...';
     this.sendBtn.disabled = true;
 
@@ -1079,6 +1116,8 @@ class CursorAgentApp {
 }
 
 // Instantiate on DOM load
+window.CursorDeckApp = CursorDeckApp;
+window.CursorAgentApp = CursorDeckApp; // Backwards compatibility
 window.addEventListener('DOMContentLoaded', () => {
-  window.cursorApp = new CursorAgentApp();
+  window.cursorApp = new CursorDeckApp();
 });

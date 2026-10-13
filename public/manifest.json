@@ -1,7 +1,7 @@
 {
-  "name": "Cursor Agent Panel",
-  "short_name": "Cursor Panel",
-  "description": "Mobile control panel for Cursor CLI over Tailscale",
+  "name": "Cursor Deck",
+  "short_name": "CursorDeck",
+  "description": "Mobile control deck for Cursor CLI over Tailscale",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",

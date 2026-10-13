@@ -48,13 +48,13 @@ test('project-manager: target scoping & path traversal defense', async () => {
   const pm = new ProjectManager('/home/user/code');
 
   // Valid project
-  const validPath = pm.resolveSafeProjectPath('cursor-agent');
-  assert.equal(validPath, '/home/user/code/cursor-agent');
+  const validPath = pm.resolveSafeProjectPath('cursor-deck');
+  assert.equal(validPath, '/home/user/code/cursor-deck');
 
   // Traversal attempts must throw security violation
   assert.throws(() => pm.resolveSafeProjectPath('../'), /Invalid project name|traversal attempt/);
   assert.throws(() => pm.resolveSafeProjectPath('../../etc/passwd'), /Invalid project name|traversal attempt/);
-  assert.throws(() => pm.resolveSafeProjectPath('cursor-agent/../../etc'), /Invalid project name|traversal attempt/);
+  assert.throws(() => pm.resolveSafeProjectPath('cursor-deck/../../etc'), /Invalid project name|traversal attempt/);
   assert.throws(() => pm.resolveSafeProjectPath('nonexistent-proj-xyz-123'), /does not exist/);
 });
 
@@ -134,7 +134,7 @@ test('server: starts, serves static assets and API correctly', async () => {
     const htmlRes = await fetch('http://127.0.0.1:4899/');
     assert.equal(htmlRes.status, 200);
     const htmlText = await htmlRes.text();
-    assert.ok(htmlText.includes('Cursor Agent'));
+    assert.ok(htmlText.includes('Cursor Deck'));
 
     // 2. Network info API
     const netRes = await fetch('http://127.0.0.1:4899/api/network');
@@ -148,11 +148,11 @@ test('server: starts, serves static assets and API correctly', async () => {
     assert.equal(projRes.status, 200);
     const projData = await projRes.json();
     assert.ok(projData.count > 0);
-    const hasCurrent = projData.projects.some(p => p.name === 'cursor-agent');
+    const hasCurrent = projData.projects.some(p => p.name === 'cursor-deck');
     assert.equal(hasCurrent, true);
 
     // 4. Git status API
-    const gitRes = await fetch('http://127.0.0.1:4899/api/git/status?project=cursor-agent');
+    const gitRes = await fetch('http://127.0.0.1:4899/api/git/status?project=cursor-deck');
     assert.equal(gitRes.status, 200);
     const gitData = await gitRes.json();
     assert.ok('isGit' in gitData);
@@ -214,7 +214,7 @@ test('process-manager: locking rejects overlapping concurrent runs with 409', as
 
   // Mock running task
   procMgr.activeTask = {
-    projectName: 'cursor-agent',
+    projectName: 'cursor-deck',
     prompt: 'long running task',
     startTime: Date.now(),
     isFinished: false
@@ -226,7 +226,7 @@ test('process-manager: locking rejects overlapping concurrent runs with 409', as
   await assert.rejects(
     async () => {
       await procMgr.runTask({
-        projectName: 'cursor-agent',
+        projectName: 'cursor-deck',
         prompt: 'second task'
       });
     },
@@ -240,7 +240,7 @@ test('process-manager: locking rejects overlapping concurrent runs with 409', as
   // Abort test
   const abortRes = await procMgr.abortActiveTask();
   assert.equal(abortRes.success, true);
-  assert.equal(abortRes.projectName, 'cursor-agent');
+  assert.equal(abortRes.projectName, 'cursor-deck');
 
   procMgr.activeTask = null;
   assert.equal(procMgr.isBusy(), false);
@@ -256,7 +256,7 @@ test('project-manager: validateNewProjectName validates name format, boundaries,
 
   // Existing project must throw 409
   assert.throws(
-    () => pm.validateNewProjectName('cursor-agent'),
+    () => pm.validateNewProjectName('cursor-deck'),
     err => {
       assert.equal(err.status, 409);
       assert.ok(err.message.includes('already exists'));
@@ -382,3 +382,36 @@ test('server: POST /api/projects creates new project and returns 201 Created', a
     await fs.rm(testRoot, { recursive: true, force: true });
   }
 });
+
+test('process-manager: handles explicit execution modes (agent, plan, ask)', async () => {
+  const pm = new AgentServer({
+    rootDir: '/home/user/code',
+    port: 4894,
+    host: '127.0.0.1',
+    agentCmd: 'node'
+  });
+
+  const procMgr = pm.processManager;
+
+  procMgr.activeTask = {
+    projectName: 'cursor-deck',
+    prompt: 'run agent tasks',
+    startTime: Date.now(),
+    mode: 'agent',
+    isFinished: false
+  };
+
+  const infoAgent = procMgr.getActiveTaskInfo();
+  assert.equal(infoAgent.mode, 'agent');
+
+  procMgr.activeTask.mode = 'plan';
+  const infoPlan = procMgr.getActiveTaskInfo();
+  assert.equal(infoPlan.mode, 'plan');
+
+  procMgr.activeTask.mode = 'ask';
+  const infoAsk = procMgr.getActiveTaskInfo();
+  assert.equal(infoAsk.mode, 'ask');
+
+  procMgr.activeTask = null;
+});
+

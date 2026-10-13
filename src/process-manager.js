@@ -37,6 +37,7 @@ export class ProcessManager {
       projectName: this.activeTask.projectName,
       prompt: this.activeTask.prompt,
       continueSession: this.activeTask.continueSession,
+      mode: this.activeTask.mode || 'agent',
       startTime: this.activeTask.startTime,
       elapsedMs: Date.now() - this.activeTask.startTime,
       pid: this.activeTask.pid
@@ -94,6 +95,10 @@ export class ProcessManager {
     // Resolve safe path with strict scoping
     const projectPath = this.projectManager.resolveSafeProjectPath(projectName);
 
+    const effectiveMode = (mode && ['plan', 'ask'].includes(String(mode).toLowerCase()))
+      ? String(mode).toLowerCase()
+      : 'agent';
+
     // Build arguments strictly according to requirements:
     // agent -p --force --trust with detached stdin and optional --continue
     const args = ['-p', '--force', '--trust'];
@@ -102,9 +107,9 @@ export class ProcessManager {
       args.push('--continue');
     }
 
-    if (mode === 'plan') {
+    if (effectiveMode === 'plan') {
       args.push('--mode', 'plan');
-    } else if (mode === 'ask') {
+    } else if (effectiveMode === 'ask') {
       args.push('--mode', 'ask');
     }
 
@@ -129,6 +134,7 @@ export class ProcessManager {
       projectPath,
       prompt: prompt.trim(),
       continueSession: Boolean(continueSession),
+      mode: effectiveMode,
       startTime,
       pid: null,
       childProcess: null,
@@ -139,7 +145,7 @@ export class ProcessManager {
     this.activeTask = taskRecord;
 
     // Announce start in SSE stream
-    const modeBadge = mode ? ` [${mode.toUpperCase()}]` : '';
+    const modeBadge = ` [${effectiveMode.toUpperCase()}]`;
     const contBadge = continueSession ? ' [CONTINUE]' : ' [NEW SESSION]';
     this.sseHub.publishLog(
       projectName,
@@ -151,6 +157,7 @@ export class ProcessManager {
     this.sseHub.publishStatus(projectName, {
       status: 'running',
       prompt: prompt.trim(),
+      mode: effectiveMode,
       continueSession: Boolean(continueSession),
       startTime,
       turnCount: session.turnCount
