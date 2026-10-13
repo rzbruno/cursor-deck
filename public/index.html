@@ -236,10 +236,86 @@
         <div class="sheet-search">
           <input id="projectSearchInput" class="search-input" type="search" placeholder="Filter projects (e.g. jettacargo, routing)...">
         </div>
-        <div style="padding: 6px 16px; display:flex; justify-content: flex-end;">
-          <button id="refreshProjectsListBtn" class="tool-btn">↻ Refresh Folders</button>
+        <div class="sheet-toolbar">
+          <button id="openCreateProjectBtn" class="primary-sm-btn" type="button" aria-label="Create new project or clone repository">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            <span>New Project</span>
+          </button>
+          <button id="refreshProjectsListBtn" class="tool-btn" type="button">↻ Refresh Folders</button>
         </div>
         <div id="projectListContainer" class="sheet-content"></div>
+      </div>
+    </div>
+
+    <!-- Create Project / Repo Modal -->
+    <div id="createProjectModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="createProjectModalTitle">
+      <div class="dialog-card create-project-card">
+        <div class="sheet-header" style="padding:0 0 12px 0;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="brand-logo" style="width:24px; height:24px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            </div>
+            <span id="createProjectModalTitle" class="sheet-title">Create New Project</span>
+          </div>
+          <button id="closeCreateProjectModalBtn" class="sheet-close-btn" aria-label="Close create project modal">✕</button>
+        </div>
+
+        <!-- Segmented Type Selector -->
+        <div class="segmented-control" role="tablist">
+          <button type="button" class="segment-btn active" id="segmentNewBtn" role="tab" aria-selected="true">
+            <span>New Project</span>
+          </button>
+          <button type="button" class="segment-btn" id="segmentCloneBtn" role="tab" aria-selected="false">
+            <span>Clone Repository</span>
+          </button>
+        </div>
+
+        <form id="createProjectForm" class="create-project-form" onsubmit="return false;">
+          <!-- Error Alert Banner -->
+          <div id="createProjectError" class="form-error-banner" style="display:none;" role="alert"></div>
+
+          <!-- Clone URL field (shown when segmentCloneBtn is active) -->
+          <div id="cloneUrlGroup" class="form-group" style="display:none;">
+            <label for="cloneUrlInput" class="form-label">Git Repository URL</label>
+            <input id="cloneUrlInput" class="form-input" type="text" placeholder="https://github.com/owner/repository.git" autocomplete="off" spellcheck="false">
+            <span class="form-hint">HTTPS or SSH Git clone URL</span>
+          </div>
+
+          <!-- Project Name field -->
+          <div class="form-group">
+            <label for="newProjectNameInput" class="form-label">Project / Directory Name</label>
+            <input id="newProjectNameInput" class="form-input" type="text" placeholder="my-awesome-project" autocomplete="off" spellcheck="false" required>
+            <span class="form-hint">Alphanumeric, dashes, underscores, dots (e.g. <code>api-service</code>)</span>
+          </div>
+
+          <!-- Description field (shown when segmentNewBtn is active) -->
+          <div id="projectDescGroup" class="form-group">
+            <label for="newProjectDescInput" class="form-label">Description <span class="form-label-opt">(optional)</span></label>
+            <input id="newProjectDescInput" class="form-input" type="text" placeholder="Brief project summary for README">
+          </div>
+
+          <!-- Local Git Options (shown when segmentNewBtn is active) -->
+          <div id="localGitOptionsGroup" class="form-checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="initGitCheckbox" checked>
+              <span class="checkbox-custom"></span>
+              <span class="checkbox-text">Initialize Git repository (<code>main</code> branch)</span>
+            </label>
+            <label class="checkbox-label" id="initialCommitSubGroup">
+              <input type="checkbox" id="initialCommitCheckbox" checked>
+              <span class="checkbox-custom"></span>
+              <span class="checkbox-text">Create initial commit (<code>README.md</code> &amp; <code>.gitignore</code>)</span>
+            </label>
+          </div>
+
+          <div class="dialog-buttons" style="margin-top: 10px;">
+            <button type="button" id="cancelCreateProjectBtn" class="btn-secondary">Cancel</button>
+            <button type="submit" id="submitCreateProjectBtn" class="btn-primary">
+              <span id="submitCreateText">Create Project</span>
+              <div id="submitCreateSpinner" class="btn-spinner" style="display:none;"></div>
+            </button>
+          </div>
+        </form>
       </div>
     </div>
 

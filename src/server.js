@@ -206,6 +206,44 @@ export class AgentServer {
         });
       }
 
+      // 4b. Create project / repo: /api/projects (POST)
+      if (pathname === '/api/projects' && method === 'POST') {
+        const body = await this.readJsonBody(req);
+        const { name, initGit, cloneUrl, description, defaultBranch, initialCommit } = body;
+
+        if (!name && !cloneUrl) {
+          return this.sendJson(res, 400, { error: 'Project name or cloneUrl is required' });
+        }
+
+        let targetName = name;
+        if (!targetName && cloneUrl) {
+          const cleanUrl = cloneUrl.trim().replace(/\/+$/, '');
+          const match = cleanUrl.match(/\/([^\/]+?)(\.git)?$/);
+          if (match && match[1]) {
+            targetName = match[1];
+          }
+        }
+
+        if (!targetName) {
+          return this.sendJson(res, 400, { error: 'Could not determine project name' });
+        }
+
+        const project = await this.projectManager.createProject({
+          name: targetName,
+          initGit: initGit !== false,
+          cloneUrl: cloneUrl || null,
+          description: description || '',
+          defaultBranch: defaultBranch || 'main',
+          initialCommit: initialCommit !== false
+        });
+
+        return this.sendJson(res, 201, {
+          success: true,
+          message: `Project ${project.name} created successfully`,
+          project
+        });
+      }
+
       // 5. Single project details: /api/projects/:name
       if (pathname.startsWith('/api/projects/') && method === 'GET') {
         const projectName = decodeURIComponent(pathname.substring('/api/projects/'.length));
@@ -348,8 +386,10 @@ export class AgentServer {
       // 404 for unknown API
       return this.sendJson(res, 404, { error: 'Not found', path: pathname });
     } catch (err) {
-      console.error(`API Error [${pathname}]:`, err);
       const statusCode = err.status || 500;
+      if (statusCode >= 500) {
+        console.error(`API Error [${pathname}]:`, err);
+      }
       return this.sendJson(res, statusCode, {
         error: err.name || 'Error',
         message: err.message,

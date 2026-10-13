@@ -16,6 +16,8 @@ class CursorAgentApp {
     this.isWakeLockActive = false;
     this.activeTimerInterval = null;
     this.taskStartTime = null;
+    this.createMode = 'new'; // 'new' | 'clone'
+    this.autoDerivedName = false;
 
     this.initElements();
     this.initEventListeners();
@@ -85,6 +87,28 @@ class CursorAgentApp {
     this.projectSearchInput = document.getElementById('projectSearchInput');
     this.projectListContainer = document.getElementById('projectListContainer');
     this.refreshProjectsListBtn = document.getElementById('refreshProjectsListBtn');
+    this.openCreateProjectBtn = document.getElementById('openCreateProjectBtn');
+
+    // Create Project Modal
+    this.createProjectModal = document.getElementById('createProjectModal');
+    this.closeCreateProjectModalBtn = document.getElementById('closeCreateProjectModalBtn');
+    this.cancelCreateProjectBtn = document.getElementById('cancelCreateProjectBtn');
+    this.segmentNewBtn = document.getElementById('segmentNewBtn');
+    this.segmentCloneBtn = document.getElementById('segmentCloneBtn');
+    this.createProjectForm = document.getElementById('createProjectForm');
+    this.createProjectError = document.getElementById('createProjectError');
+    this.cloneUrlGroup = document.getElementById('cloneUrlGroup');
+    this.cloneUrlInput = document.getElementById('cloneUrlInput');
+    this.newProjectNameInput = document.getElementById('newProjectNameInput');
+    this.projectDescGroup = document.getElementById('projectDescGroup');
+    this.newProjectDescInput = document.getElementById('newProjectDescInput');
+    this.localGitOptionsGroup = document.getElementById('localGitOptionsGroup');
+    this.initGitCheckbox = document.getElementById('initGitCheckbox');
+    this.initialCommitSubGroup = document.getElementById('initialCommitSubGroup');
+    this.initialCommitCheckbox = document.getElementById('initialCommitCheckbox');
+    this.submitCreateProjectBtn = document.getElementById('submitCreateProjectBtn');
+    this.submitCreateText = document.getElementById('submitCreateText');
+    this.submitCreateSpinner = document.getElementById('submitCreateSpinner');
 
     // QR Modal
     this.qrModal = document.getElementById('qrModal');
@@ -102,6 +126,69 @@ class CursorAgentApp {
     });
     this.projectSearchInput.addEventListener('input', e => this.filterProjects(e.target.value));
     this.refreshProjectsListBtn.addEventListener('click', () => this.loadProjects(true));
+
+    // Create Project Modal triggers
+    if (this.openCreateProjectBtn) {
+      this.openCreateProjectBtn.addEventListener('click', () => {
+        this.closeProjectModal();
+        this.openCreateProjectModal();
+      });
+    }
+    if (this.closeCreateProjectModalBtn) {
+      this.closeCreateProjectModalBtn.addEventListener('click', () => this.closeCreateProjectModal());
+    }
+    if (this.cancelCreateProjectBtn) {
+      this.cancelCreateProjectBtn.addEventListener('click', () => this.closeCreateProjectModal());
+    }
+    if (this.createProjectModal) {
+      this.createProjectModal.addEventListener('click', e => {
+        if (e.target === this.createProjectModal) this.closeCreateProjectModal();
+      });
+    }
+
+    // Segments: New vs Clone
+    if (this.segmentNewBtn && this.segmentCloneBtn) {
+      this.segmentNewBtn.addEventListener('click', () => this.switchCreateMode('new'));
+      this.segmentCloneBtn.addEventListener('click', () => this.switchCreateMode('clone'));
+    }
+
+    // Checkbox dependencies
+    if (this.initGitCheckbox) {
+      this.initGitCheckbox.addEventListener('change', () => {
+        if (this.initialCommitSubGroup) {
+          this.initialCommitSubGroup.style.display = this.initGitCheckbox.checked ? 'flex' : 'none';
+        }
+        if (!this.initGitCheckbox.checked && this.initialCommitCheckbox) {
+          this.initialCommitCheckbox.checked = false;
+        }
+      });
+    }
+
+    // Auto-derive project name from clone URL
+    if (this.cloneUrlInput && this.newProjectNameInput) {
+      this.cloneUrlInput.addEventListener('input', () => {
+        if (this.createMode === 'clone' && (!this.newProjectNameInput.value || this.autoDerivedName)) {
+          const val = this.cloneUrlInput.value.trim().replace(/\/+$/, '');
+          const match = val.match(/\/([^\/]+?)(\.git)?$/);
+          if (match && match[1]) {
+            this.newProjectNameInput.value = match[1];
+            this.autoDerivedName = true;
+          }
+        }
+      });
+
+      this.newProjectNameInput.addEventListener('input', () => {
+        this.autoDerivedName = false;
+      });
+    }
+
+    // Form submission
+    if (this.createProjectForm) {
+      this.createProjectForm.addEventListener('submit', e => {
+        e.preventDefault();
+        this.submitCreateProject();
+      });
+    }
 
     // QR Modal
     this.qrBtn.addEventListener('click', () => this.openQrModal());
@@ -316,6 +403,143 @@ class CursorAgentApp {
 
   closeProjectModal() {
     this.projectModal.classList.remove('active');
+  }
+
+  /* --------------------------------------------------------------------------
+     Create Project Modal Handling
+     -------------------------------------------------------------------------- */
+  openCreateProjectModal() {
+    this.createMode = 'new';
+    this.autoDerivedName = false;
+    if (this.createProjectError) {
+      this.createProjectError.style.display = 'none';
+      this.createProjectError.textContent = '';
+    }
+    if (this.newProjectNameInput) this.newProjectNameInput.value = '';
+    if (this.newProjectDescInput) this.newProjectDescInput.value = '';
+    if (this.cloneUrlInput) this.cloneUrlInput.value = '';
+    if (this.initGitCheckbox) this.initGitCheckbox.checked = true;
+    if (this.initialCommitCheckbox) this.initialCommitCheckbox.checked = true;
+    if (this.initialCommitSubGroup) this.initialCommitSubGroup.style.display = 'flex';
+
+    this.switchCreateMode('new');
+    if (this.createProjectModal) {
+      this.createProjectModal.classList.add('active');
+    }
+    if (this.newProjectNameInput) {
+      setTimeout(() => this.newProjectNameInput.focus(), 120);
+    }
+  }
+
+  closeCreateProjectModal() {
+    if (this.createProjectModal) {
+      this.createProjectModal.classList.remove('active');
+    }
+  }
+
+  switchCreateMode(mode) {
+    this.createMode = mode;
+    if (this.createProjectError) {
+      this.createProjectError.style.display = 'none';
+    }
+
+    if (mode === 'new') {
+      if (this.segmentNewBtn) {
+        this.segmentNewBtn.classList.add('active');
+        this.segmentNewBtn.setAttribute('aria-selected', 'true');
+      }
+      if (this.segmentCloneBtn) {
+        this.segmentCloneBtn.classList.remove('active');
+        this.segmentCloneBtn.setAttribute('aria-selected', 'false');
+      }
+      if (this.cloneUrlGroup) this.cloneUrlGroup.style.display = 'none';
+      if (this.projectDescGroup) this.projectDescGroup.style.display = 'flex';
+      if (this.localGitOptionsGroup) this.localGitOptionsGroup.style.display = 'flex';
+      if (this.submitCreateText) this.submitCreateText.textContent = 'Create Project';
+    } else {
+      if (this.segmentCloneBtn) {
+        this.segmentCloneBtn.classList.add('active');
+        this.segmentCloneBtn.setAttribute('aria-selected', 'true');
+      }
+      if (this.segmentNewBtn) {
+        this.segmentNewBtn.classList.remove('active');
+        this.segmentNewBtn.setAttribute('aria-selected', 'false');
+      }
+      if (this.cloneUrlGroup) this.cloneUrlGroup.style.display = 'flex';
+      if (this.projectDescGroup) this.projectDescGroup.style.display = 'none';
+      if (this.localGitOptionsGroup) this.localGitOptionsGroup.style.display = 'none';
+      if (this.submitCreateText) this.submitCreateText.textContent = 'Clone Repository';
+    }
+  }
+
+  async submitCreateProject() {
+    const name = this.newProjectNameInput ? this.newProjectNameInput.value.trim() : '';
+    const cloneUrl = this.cloneUrlInput ? this.cloneUrlInput.value.trim() : '';
+    const description = this.newProjectDescInput ? this.newProjectDescInput.value.trim() : '';
+    const initGit = this.initGitCheckbox ? this.initGitCheckbox.checked : true;
+    const initialCommit = this.initialCommitCheckbox ? this.initialCommitCheckbox.checked : true;
+
+    if (this.createMode === 'clone' && !cloneUrl) {
+      this.showCreateError('Please provide a Git repository URL to clone');
+      if (this.cloneUrlInput) this.cloneUrlInput.focus();
+      return;
+    }
+
+    if (!name) {
+      this.showCreateError('Please provide a project name');
+      if (this.newProjectNameInput) this.newProjectNameInput.focus();
+      return;
+    }
+
+    // Set loading state
+    if (this.submitCreateProjectBtn) this.submitCreateProjectBtn.disabled = true;
+    if (this.submitCreateSpinner) this.submitCreateSpinner.style.display = 'inline-block';
+    if (this.submitCreateText) this.submitCreateText.style.display = 'none';
+    if (this.createProjectError) this.createProjectError.style.display = 'none';
+
+    try {
+      const payload = {
+        name,
+        initGit: this.createMode === 'new' ? initGit : true,
+        cloneUrl: this.createMode === 'clone' ? cloneUrl : null,
+        description: this.createMode === 'new' ? description : '',
+        initialCommit: this.createMode === 'new' ? initialCommit : true
+      };
+
+      const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || data.error || 'Failed to create project');
+      }
+
+      // Success! Close modal and refresh projects
+      this.closeCreateProjectModal();
+      await this.loadProjects();
+
+      // Automatically select and switch into the new project
+      if (data.project && data.project.name) {
+        await this.selectProject(data.project.name);
+      }
+      this.switchTab('console');
+    } catch (err) {
+      this.showCreateError(err.message);
+    } finally {
+      if (this.submitCreateProjectBtn) this.submitCreateProjectBtn.disabled = false;
+      if (this.submitCreateSpinner) this.submitCreateSpinner.style.display = 'none';
+      if (this.submitCreateText) this.submitCreateText.style.display = 'inline';
+    }
+  }
+
+  showCreateError(msg) {
+    if (this.createProjectError) {
+      this.createProjectError.textContent = msg;
+      this.createProjectError.style.display = 'block';
+    }
   }
 
   async selectProject(projectName) {

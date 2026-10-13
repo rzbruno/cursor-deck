@@ -245,3 +245,140 @@ test('process-manager: locking rejects overlapping concurrent runs with 409', as
   procMgr.activeTask = null;
   assert.equal(procMgr.isBusy(), false);
 });
+
+test('project-manager: validateNewProjectName validates name format, boundaries, and duplicates', async () => {
+  const pm = new ProjectManager('/home/user/code');
+
+  // Valid names
+  const valid = pm.validateNewProjectName('brand-new-app');
+  assert.equal(valid.cleanName, 'brand-new-app');
+  assert.equal(valid.resolvedPath, '/home/user/code/brand-new-app');
+
+  // Existing project must throw 409
+  assert.throws(
+    () => pm.validateNewProjectName('cursor-agent'),
+    err => {
+      assert.equal(err.status, 409);
+      assert.ok(err.message.includes('already exists'));
+      return true;
+    }
+  );
+
+  // Traversal & invalid formats must throw 400
+  assert.throws(() => pm.validateNewProjectName('../other'), err => err.status === 400);
+  assert.throws(() => pm.validateNewProjectName('has space'), err => err.status === 400);
+  assert.throws(() => pm.validateNewProjectName('-starts-with-dash'), err => err.status === 400);
+  assert.throws(() => pm.validateNewProjectName(''), err => err.status === 400);
+});
+
+test('project-manager: creates a local project with git, readme, and gitignore', async () => {
+  const testRoot = path.resolve(process.cwd(), '.test-tmp-pm');
+  await fs.mkdir(testRoot, { recursive: true });
+
+  const pm = new ProjectManager(testRoot);
+
+  try {
+    const proj = await pm.createProject({
+      name: 'hello-world',
+      description: 'Test project description',
+      initGit: true,
+      initialCommit: true
+    });
+
+    assert.equal(proj.name, 'hello-world');
+    assert.equal(proj.isGit, true);
+    assert.equal(proj.branch, 'main');
+    assert.ok(proj.lastCommit);
+    assert.equal(proj.lastCommit.msg, 'Initial commit');
+
+    // Check files created on disk
+    const readme = await fs.readFile(path.join(testRoot, 'hello-world', 'README.md'), 'utf8');
+    assert.ok(readme.includes('# hello-world'));
+    assert.ok(readme.includes('Test project description'));
+
+    const gitignore = await fs.readFile(path.join(testRoot, 'hello-world', '.gitignore'), 'utf8');
+    assert.ok(gitignore.includes('node_modules/'));
+
+    // Creating again must fail with 409
+    await assert.rejects(
+      async () => {
+        await pm.createProject({ name: 'hello-world' });
+      },
+      err => {
+        assert.equal(err.status, 409);
+        return true;
+      }
+    );
+
+    // Test cloning this project into a new one
+    const cloned = await pm.createProject({
+      name: 'cloned-world',
+      cloneUrl: `file://${path.join(testRoot, 'hello-world')}`
+    });
+
+    assert.equal(cloned.name, 'cloned-world');
+    assert.equal(cloned.isGit, true);
+  } finally {
+    await fs.rm(testRoot, { recursive: true, force: true });
+  }
+});
+
+test('server: POST /api/projects creates new project and returns 201 Created', async () => {
+  const testRoot = path.resolve(process.cwd(), '.test-tmp-server');
+  await fs.mkdir(testRoot, { recursive: true });
+
+  const server = new AgentServer({
+    rootDir: testRoot,
+    port: 4895,
+    host: '127.0.0.1'
+  });
+
+  await server.start();
+
+  try {
+    // 1. Create a new project via POST /api/projects
+    const createRes = await fetch('http://127.0.0.1:4895/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'test-backend-api',
+        description: 'Created through REST API',
+        initGit: true,
+        initialCommit: true
+      })
+    });
+
+    assert.equal(createRes.status, 201);
+    const createData = await createRes.json();
+    assert.equal(createData.success, true);
+    assert.equal(createData.project.name, 'test-backend-api');
+    assert.equal(createData.project.isGit, true);
+
+    // 2. Verify it is listed in GET /api/projects
+    const listRes = await fetch('http://127.0.0.1:4895/api/projects');
+    const listData = await listRes.json();
+    assert.equal(listData.count, 1);
+    assert.equal(listData.projects[0].name, 'test-backend-api');
+
+    // 3. Duplicate name attempt returns 409 Conflict
+    const dupRes = await fetch('http://127.0.0.1:4895/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'test-backend-api' })
+    });
+    assert.equal(dupRes.status, 409);
+    const dupData = await dupRes.json();
+    assert.ok(dupData.message.includes('already exists'));
+
+    // 4. Invalid name returns 400 Bad Request
+    const invalidRes = await fetch('http://127.0.0.1:4895/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '../bad/path' })
+    });
+    assert.equal(invalidRes.status, 400);
+  } finally {
+    await server.stop();
+    await fs.rm(testRoot, { recursive: true, force: true });
+  }
+});
