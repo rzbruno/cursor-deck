@@ -20,6 +20,13 @@ class CursorDeckApp {
     this.createMode = 'new'; // 'new' | 'clone'
     this.autoDerivedName = false;
 
+    // Model selection state
+    const savedModel = localStorage.getItem('cursor_selected_model');
+    this.currentModel = savedModel || 'auto';
+    this.availableModels = [];
+    this.modelFilter = 'all';
+    this.modelSearchQuery = '';
+
     this.initElements();
     this.initEventListeners();
     this.initApp();
@@ -59,6 +66,19 @@ class CursorDeckApp {
     this.continueToggle = document.getElementById('continueToggle');
     this.turnCountBadge = document.getElementById('turnCountBadge');
     this.modeButtons = document.querySelectorAll('.mode-option');
+
+    // Model Selector
+    this.modelSelectorBtn = document.getElementById('modelSelectorBtn');
+    this.selectedModelLabel = document.getElementById('selectedModelLabel');
+    this.bannerModelBadge = document.getElementById('bannerModelBadge');
+    this.modelModal = document.getElementById('modelModal');
+    this.closeModelModalBtn = document.getElementById('closeModelModalBtn');
+    this.modelSearchInput = document.getElementById('modelSearchInput');
+    this.modelListContainer = document.getElementById('modelListContainer');
+    this.modelCountBadge = document.getElementById('modelCountBadge');
+    this.modelFilterChips = document.querySelectorAll('.model-filter-chip');
+    this.customModelInput = document.getElementById('customModelInput');
+    this.applyCustomModelBtn = document.getElementById('applyCustomModelBtn');
 
     // Git Status
     this.gitBranchName = document.getElementById('gitBranchName');
@@ -237,6 +257,51 @@ class CursorDeckApp {
       });
     });
 
+    // Model Selector Modal
+    if (this.modelSelectorBtn) {
+      this.modelSelectorBtn.addEventListener('click', () => this.openModelModal());
+    }
+    if (this.closeModelModalBtn) {
+      this.closeModelModalBtn.addEventListener('click', () => this.closeModelModal());
+    }
+    if (this.modelModal) {
+      this.modelModal.addEventListener('click', (e) => {
+        if (e.target === this.modelModal) this.closeModelModal();
+      });
+    }
+    if (this.modelSearchInput) {
+      this.modelSearchInput.addEventListener('input', (e) => {
+        this.modelSearchQuery = e.target.value.toLowerCase().trim();
+        this.renderModelList();
+      });
+    }
+    if (this.modelFilterChips) {
+      this.modelFilterChips.forEach(chip => {
+        chip.addEventListener('click', () => {
+          this.filterModels(chip.dataset.filter);
+        });
+      });
+    }
+    if (this.applyCustomModelBtn) {
+      this.applyCustomModelBtn.addEventListener('click', () => {
+        const val = this.customModelInput?.value?.trim();
+        if (val) {
+          this.setModel(val);
+        }
+      });
+    }
+    if (this.customModelInput) {
+      this.customModelInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const val = this.customModelInput.value.trim();
+          if (val) {
+            this.setModel(val);
+          }
+        }
+      });
+    }
+
     // Abort Button
     this.abortBtn.addEventListener('click', () => this.abortTask());
 
@@ -299,8 +364,10 @@ class CursorDeckApp {
 
   async initApp() {
     this.updateModeUI();
+    this.updateModelUI();
     await this.checkNetworkStatus();
     await this.loadProjects();
+    await this.loadModels();
 
     // Restore selected project from localStorage
     const savedProject = localStorage.getItem('selected_project');
@@ -709,12 +776,174 @@ class CursorDeckApp {
     }
   }
 
+  /* --------------------------------------------------------------------------
+     Model Selection Controls & Modal
+     -------------------------------------------------------------------------- */
+  async loadModels() {
+    try {
+      const res = await fetch('/api/models');
+      if (res.ok) {
+        const data = await res.json();
+        this.availableModels = data.models || [];
+      } else {
+        this.availableModels = this.getFallbackModels();
+      }
+    } catch (err) {
+      this.availableModels = this.getFallbackModels();
+    }
+    this.updateModelUI();
+  }
+
+  getFallbackModels() {
+    return [
+      { id: 'auto', name: 'Auto (Default)', provider: 'Cursor', isDefault: true },
+      { id: 'claude-sonnet-5-thinking-high', name: 'Claude Sonnet 5 1M Thinking', provider: 'Anthropic', isDefault: false },
+      { id: 'claude-4.5-sonnet', name: 'Claude Sonnet 4.5', provider: 'Anthropic', isDefault: false },
+      { id: 'claude-opus-4-7-thinking-high', name: 'Claude Opus 4.7 1M High Thinking', provider: 'Anthropic', isDefault: false },
+      { id: 'gpt-5.3-codex', name: 'Codex 5.3', provider: 'OpenAI', isDefault: false },
+      { id: 'gpt-5.2', name: 'GPT-5.2', provider: 'OpenAI', isDefault: false },
+      { id: 'gpt-5-mini', name: 'GPT-5 Mini', provider: 'OpenAI', isDefault: false },
+      { id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', provider: 'Google', isDefault: false },
+      { id: 'gemini-3.7-flash-high', name: 'Gemini 3.7 Flash', provider: 'Google', isDefault: false },
+      { id: 'cursor-grok-4.5-high', name: 'Grok 4.5', provider: 'xAI', isDefault: false }
+    ];
+  }
+
+  openModelModal() {
+    this.modelModal.classList.add('active');
+    this.modelSearchInput.value = '';
+    this.modelSearchQuery = '';
+    this.modelFilter = 'all';
+    this.updateModelFilterChips();
+    this.renderModelList();
+    setTimeout(() => this.modelSearchInput?.focus(), 50);
+  }
+
+  closeModelModal() {
+    this.modelModal.classList.remove('active');
+  }
+
+  updateModelFilterChips() {
+    this.modelFilterChips.forEach(chip => {
+      chip.classList.toggle('active', chip.dataset.filter === this.modelFilter);
+    });
+  }
+
+  filterModels(filter) {
+    this.modelFilter = filter;
+    this.updateModelFilterChips();
+    this.renderModelList();
+  }
+
+  setModel(modelId) {
+    const cleanId = (modelId && typeof modelId === 'string' && modelId.trim()) ? modelId.trim() : 'auto';
+    this.currentModel = cleanId;
+    localStorage.setItem('cursor_selected_model', cleanId);
+    this.updateModelUI();
+    this.closeModelModal();
+  }
+
+  updateModelUI() {
+    const isAuto = !this.currentModel || this.currentModel === 'auto';
+    let displayName = 'Auto';
+
+    if (!isAuto) {
+      const found = this.availableModels.find(m => m.id === this.currentModel);
+      if (found) {
+        displayName = found.name;
+      } else {
+        displayName = this.currentModel;
+      }
+    }
+
+    if (this.selectedModelLabel) {
+      this.selectedModelLabel.textContent = displayName;
+    }
+
+    if (this.modelSelectorBtn) {
+      this.modelSelectorBtn.title = isAuto ? 'Model: Auto (Cursor Agent default)' : `Model: ${this.currentModel}`;
+      this.modelSelectorBtn.classList.toggle('has-custom-model', !isAuto);
+    }
+  }
+
+  renderModelList() {
+    if (!this.modelListContainer) return;
+
+    let filtered = [...this.availableModels];
+
+    // Filter by provider
+    if (this.modelFilter !== 'all' && this.modelFilter !== 'custom') {
+      filtered = filtered.filter(m => (m.provider || '').toLowerCase() === this.modelFilter.toLowerCase());
+    }
+
+    // Filter by search query
+    if (this.modelSearchQuery) {
+      const q = this.modelSearchQuery.toLowerCase();
+      filtered = filtered.filter(m =>
+        m.id.toLowerCase().includes(q) ||
+        m.name.toLowerCase().includes(q) ||
+        (m.provider && m.provider.toLowerCase().includes(q))
+      );
+    }
+
+    if (this.modelCountBadge) {
+      this.modelCountBadge.textContent = `${filtered.length} models`;
+    }
+
+    if (filtered.length === 0) {
+      this.modelListContainer.innerHTML = `
+        <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.85rem;">
+          No matching models found. Use the custom model input above to specify any model identifier.
+        </div>
+      `;
+      return;
+    }
+
+    const currentId = this.currentModel || 'auto';
+
+    this.modelListContainer.innerHTML = filtered.map(model => {
+      const isSelected = model.id === currentId;
+      const providerClass = `badge-provider-${(model.provider || 'other').toLowerCase()}`;
+      return `
+        <div class="model-item ${isSelected ? 'selected' : ''}" data-model-id="${model.id}" role="button" tabindex="0">
+          <div class="model-item-main">
+            <div class="model-item-title-row">
+              <span class="model-item-title">${this.escape(model.name)}</span>
+              <span class="model-provider-badge ${providerClass}">${this.escape(model.provider || 'Other')}</span>
+              ${model.isDefault ? '<span class="badge badge-branch" style="font-size:0.6rem;padding:0 5px;">DEFAULT</span>' : ''}
+            </div>
+            <span class="model-item-id">${this.escape(model.id)}</span>
+          </div>
+          <div class="model-item-check" aria-hidden="true"></div>
+        </div>
+      `;
+    }).join('');
+
+    // Attach click handlers
+    this.modelListContainer.querySelectorAll('.model-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const id = item.dataset.modelId;
+        this.setModel(id);
+      });
+    });
+  }
+
   showActiveTask(task) {
     this.activeTaskBanner.classList.add('visible');
     const mode = (task.mode || 'agent').toLowerCase();
     if (this.bannerModeBadge) {
       this.bannerModeBadge.textContent = mode.toUpperCase();
       this.bannerModeBadge.className = `mode-badge mode-badge-${mode}`;
+    }
+    if (this.bannerModelBadge) {
+      const model = task.model || (this.currentModel && this.currentModel !== 'auto' ? this.currentModel : null);
+      if (model) {
+        this.bannerModelBadge.textContent = model.toUpperCase();
+        this.bannerModelBadge.style.display = 'inline-block';
+      } else {
+        this.bannerModelBadge.textContent = 'AUTO';
+        this.bannerModelBadge.style.display = 'inline-block';
+      }
     }
     this.bannerPromptText.textContent = task.prompt || 'Running task...';
     this.sendBtn.disabled = true;
@@ -731,6 +960,9 @@ class CursorDeckApp {
 
   hideActiveTask() {
     this.activeTaskBanner.classList.remove('visible');
+    if (this.bannerModelBadge) {
+      this.bannerModelBadge.style.display = 'none';
+    }
     this.sendBtn.disabled = false;
     clearInterval(this.activeTimerInterval);
   }
@@ -759,15 +991,20 @@ class CursorDeckApp {
     this.promptTextarea.style.height = 'auto';
 
     try {
+      const payload = {
+        project: this.currentProject,
+        prompt,
+        continueSession: this.continueSession,
+        mode: this.currentMode
+      };
+      if (this.currentModel && this.currentModel !== 'auto') {
+        payload.model = this.currentModel;
+      }
+
       const res = await fetch('/api/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project: this.currentProject,
-          prompt,
-          continueSession: this.continueSession,
-          mode: this.currentMode
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!res.ok) {

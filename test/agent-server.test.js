@@ -415,3 +415,88 @@ test('process-manager: handles explicit execution modes (agent, plan, ask)', asy
   procMgr.activeTask = null;
 });
 
+test('process-manager: handles model selection, parsing, and provider detection', async () => {
+  const pm = new AgentServer({
+    rootDir: '/home/user/code',
+    port: 4895,
+    host: '127.0.0.1',
+    agentCmd: 'node'
+  });
+
+  const procMgr = pm.processManager;
+
+  // Active task model tracking
+  procMgr.activeTask = {
+    projectName: 'cursor-deck',
+    prompt: 'model test prompt',
+    startTime: Date.now(),
+    mode: 'agent',
+    model: 'claude-sonnet-5-thinking-high',
+    isFinished: false
+  };
+
+  const info = procMgr.getActiveTaskInfo();
+  assert.equal(info.model, 'claude-sonnet-5-thinking-high');
+
+  // Provider detection
+  assert.equal(procMgr.detectModelProvider('claude-sonnet-5', 'Claude Sonnet 5'), 'Anthropic');
+  assert.equal(procMgr.detectModelProvider('gpt-5.2', 'GPT-5.2'), 'OpenAI');
+  assert.equal(procMgr.detectModelProvider('gemini-3.8-flash-high', 'Gemini 3.8 Flash High'), 'Google');
+  assert.equal(procMgr.detectModelProvider('cursor-grok-4.5', 'Grok 4.5'), 'xAI');
+  assert.equal(procMgr.detectModelProvider('composer-2.5', 'Composer 2.5'), 'Cursor');
+
+  // Parsing CLI output
+  const sampleCliOutput = `
+Available models
+
+auto - Auto (current, default)
+gpt-5.3-codex - Codex 5.3
+claude-sonnet-5-thinking-high - Claude Sonnet 5 1M Thinking
+gemini-3.8-flash-high - Gemini 3.8 Flash High
+Tip: use --model <id> to switch.
+`;
+
+  const parsed = procMgr.parseModelsOutput(sampleCliOutput);
+  assert.ok(parsed.length >= 4);
+  assert.equal(parsed[0].id, 'auto');
+  assert.equal(parsed[0].isDefault, true);
+  assert.equal(parsed.find(m => m.id === 'claude-sonnet-5-thinking-high')?.provider, 'Anthropic');
+  assert.equal(parsed.find(m => m.id === 'gpt-5.3-codex')?.provider, 'OpenAI');
+  assert.equal(parsed.find(m => m.id === 'gemini-3.8-flash-high')?.provider, 'Google');
+
+  // Available models returns valid list
+  const models = await procMgr.getAvailableModels();
+  assert.ok(Array.isArray(models));
+  assert.ok(models.length > 0);
+
+  procMgr.activeTask = null;
+});
+
+test('server: GET /api/models returns 200 with available model list', async () => {
+  const testRoot = path.join('/home/user/code', 'test-models-env-' + Date.now());
+  await fs.mkdir(testRoot, { recursive: true });
+
+  const server = new AgentServer({
+    rootDir: testRoot,
+    port: 4896,
+    host: '127.0.0.1',
+    agentCmd: 'agent'
+  });
+
+  try {
+    await server.start();
+
+    const res = await fetch('http://127.0.0.1:4896/api/models');
+    assert.equal(res.status, 200);
+
+    const data = await res.json();
+    assert.ok(data.count > 0);
+    assert.ok(Array.isArray(data.models));
+    assert.equal(data.default, 'auto');
+    assert.ok(data.models.some(m => m.id === 'auto'));
+  } finally {
+    await server.stop();
+    await fs.rm(testRoot, { recursive: true, force: true });
+  }
+});
+

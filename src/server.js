@@ -252,6 +252,17 @@ export class AgentServer {
         return this.sendJson(res, 200, { project, session });
       }
 
+      // 5b. Models list: /api/models
+      if (pathname === '/api/models' && method === 'GET') {
+        const refresh = parsedUrl.searchParams.get('refresh') === 'true';
+        const models = await this.processManager.getAvailableModels({ refresh });
+        return this.sendJson(res, 200, {
+          count: models.length,
+          models,
+          default: 'auto'
+        });
+      }
+
       // 6. Process Execution: /api/run
       if (pathname === '/api/run' && method === 'POST') {
         const body = await this.readJsonBody(req);

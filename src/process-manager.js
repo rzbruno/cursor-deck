@@ -4,7 +4,7 @@
  * provides immediate abort controls, and manages multi-turn session continuation.
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 import readline from 'node:readline';
 
 export class ProcessManager {
@@ -19,6 +19,9 @@ export class ProcessManager {
     // Track multi-turn sessions per project
     // project -> { turnCount: number, lastPrompt: string, lastStatus: string, lastRunAt: number }
     this.projectSessions = new Map();
+
+    // Cache of available models from Cursor CLI
+    this.cachedModels = null;
   }
 
   /**
@@ -38,6 +41,7 @@ export class ProcessManager {
       prompt: this.activeTask.prompt,
       continueSession: this.activeTask.continueSession,
       mode: this.activeTask.mode || 'agent',
+      model: this.activeTask.model || null,
       startTime: this.activeTask.startTime,
       elapsedMs: Date.now() - this.activeTask.startTime,
       pid: this.activeTask.pid
@@ -74,6 +78,112 @@ export class ProcessManager {
   }
 
   /**
+   * Fetch available models from Cursor CLI or fallback list
+   */
+  async getAvailableModels({ refresh = false } = {}) {
+    if (!refresh && this.cachedModels && this.cachedModels.length > 0) {
+      return this.cachedModels;
+    }
+
+    try {
+      const models = await new Promise((resolve, reject) => {
+        execFile(this.agentCmd, ['--list-models'], { timeout: 10000 }, (error, stdout) => {
+          if (error) {
+            return reject(error);
+          }
+          const parsed = this.parseModelsOutput(stdout);
+          if (parsed && parsed.length > 0) {
+            resolve(parsed);
+          } else {
+            resolve(this.getDefaultFallbackModels());
+          }
+        });
+      });
+
+      this.cachedModels = models;
+      return models;
+    } catch (err) {
+      // If CLI is not present or command fails, return fallback models
+      const fallback = this.getDefaultFallbackModels();
+      this.cachedModels = fallback;
+      return fallback;
+    }
+  }
+
+  /**
+   * Parse stdout of `agent --list-models`
+   */
+  parseModelsOutput(output) {
+    if (!output || typeof output !== 'string') return [];
+    const lines = output.split('\n');
+    const models = [];
+    const seen = new Set();
+
+    // Always include Auto first
+    models.push({
+      id: 'auto',
+      name: 'Auto (Default)',
+      provider: 'Cursor',
+      isDefault: true
+    });
+    seen.add('auto');
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('Available models') || line.startsWith('Tip:')) continue;
+      const idx = line.indexOf(' - ');
+      if (idx !== -1) {
+        const id = line.slice(0, idx).trim();
+        const name = line.slice(idx + 3).trim();
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          models.push({
+            id,
+            name,
+            provider: this.detectModelProvider(id, name),
+            isDefault: false
+          });
+        }
+      }
+    }
+
+    return models;
+  }
+
+  /**
+   * Detect model provider based on model identifier and name
+   */
+  detectModelProvider(id, name) {
+    const s = `${id} ${name}`.toLowerCase();
+    if (s.includes('claude') || s.includes('sonnet') || s.includes('opus') || s.includes('haiku') || s.includes('fable')) return 'Anthropic';
+    if (s.includes('gpt') || s.includes('codex') || s.includes('o1') || s.includes('o3') || s.includes('o4')) return 'OpenAI';
+    if (s.includes('gemini')) return 'Google';
+    if (s.includes('grok')) return 'xAI';
+    if (s.includes('kimi')) return 'Moonshot';
+    if (s.includes('glm')) return 'Zhipu';
+    if (s.includes('composer')) return 'Cursor';
+    return 'Other';
+  }
+
+  /**
+   * Fallback models if agent command is unavailable
+   */
+  getDefaultFallbackModels() {
+    return [
+      { id: 'auto', name: 'Auto (Default)', provider: 'Cursor', isDefault: true },
+      { id: 'claude-sonnet-5-thinking-high', name: 'Claude Sonnet 5 1M Thinking', provider: 'Anthropic', isDefault: false },
+      { id: 'claude-4.5-sonnet', name: 'Claude Sonnet 4.5', provider: 'Anthropic', isDefault: false },
+      { id: 'claude-opus-4-7-thinking-high', name: 'Claude Opus 4.7 1M High Thinking', provider: 'Anthropic', isDefault: false },
+      { id: 'gpt-5.3-codex', name: 'Codex 5.3', provider: 'OpenAI', isDefault: false },
+      { id: 'gpt-5.2', name: 'GPT-5.2', provider: 'OpenAI', isDefault: false },
+      { id: 'gpt-5-mini', name: 'GPT-5 Mini', provider: 'OpenAI', isDefault: false },
+      { id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', provider: 'Google', isDefault: false },
+      { id: 'gemini-3.7-flash-high', name: 'Gemini 3.7 Flash', provider: 'Google', isDefault: false },
+      { id: 'cursor-grok-4.5-high', name: 'Grok 4.5', provider: 'xAI', isDefault: false }
+    ];
+  }
+
+  /**
    * Execute Cursor agent headlessly scoped to project
    */
   async runTask({ projectName, prompt, continueSession = false, mode, model }) {
@@ -99,6 +209,10 @@ export class ProcessManager {
       ? String(mode).toLowerCase()
       : 'agent';
 
+    const effectiveModel = (model && typeof model === 'string' && model.trim() && model.trim() !== 'auto')
+      ? model.trim()
+      : null;
+
     // Build arguments strictly according to requirements:
     // agent -p --force --trust with detached stdin and optional --continue
     const args = ['-p', '--force', '--trust'];
@@ -113,8 +227,8 @@ export class ProcessManager {
       args.push('--mode', 'ask');
     }
 
-    if (model) {
-      args.push('--model', model);
+    if (effectiveModel) {
+      args.push('--model', effectiveModel);
     }
 
     // Initial prompt as argument
@@ -135,6 +249,7 @@ export class ProcessManager {
       prompt: prompt.trim(),
       continueSession: Boolean(continueSession),
       mode: effectiveMode,
+      model: effectiveModel,
       startTime,
       pid: null,
       childProcess: null,
@@ -146,10 +261,11 @@ export class ProcessManager {
 
     // Announce start in SSE stream
     const modeBadge = ` [${effectiveMode.toUpperCase()}]`;
+    const modelBadge = effectiveModel ? ` [MODEL: ${effectiveModel}]` : '';
     const contBadge = continueSession ? ' [CONTINUE]' : ' [NEW SESSION]';
     this.sseHub.publishLog(
       projectName,
-      `\x1b[1;36m▶ Spawning Cursor CLI in ~/code/${projectName}${modeBadge}${contBadge}\x1b[0m\n` +
+      `\x1b[1;36m▶ Spawning Cursor CLI in ~/code/${projectName}${modeBadge}${modelBadge}${contBadge}\x1b[0m\n` +
       `\x1b[90m$ ${this.agentCmd} ${args.slice(0, -1).join(' ')} "${prompt.trim().substring(0, 80)}${prompt.length > 80 ? '...' : ''}"\x1b[0m\n`,
       'system'
     );
@@ -158,6 +274,7 @@ export class ProcessManager {
       status: 'running',
       prompt: prompt.trim(),
       mode: effectiveMode,
+      model: effectiveModel,
       continueSession: Boolean(continueSession),
       startTime,
       turnCount: session.turnCount

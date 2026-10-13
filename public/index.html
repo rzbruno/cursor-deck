@@ -95,6 +95,7 @@
             <div class="banner-left">
               <div class="banner-spinner"></div>
               <span id="bannerModeBadge" class="mode-badge mode-badge-agent">AGENT</span>
+              <span id="bannerModelBadge" class="mode-badge mode-badge-model" style="display:none;">AUTO</span>
               <span id="bannerPromptText" class="banner-text">Executing Cursor Deck...</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
@@ -132,11 +133,24 @@
           <!-- Bottom Sticky Prompt Dock -->
           <footer class="prompt-dock">
             <div class="prompt-options-row">
-              <!-- Continuation Toggle Switch -->
-              <div id="continueToggle" class="toggle-chip" title="Toggle --continue flag" role="switch" aria-checked="false">
-                <span class="toggle-switch"></span>
-                <span>Continue Session</span>
-                <span id="turnCountBadge" class="badge badge-branch" style="display:none;">Turn 1</span>
+              <div class="prompt-options-left">
+                <!-- Continuation Toggle Switch -->
+                <div id="continueToggle" class="toggle-chip" title="Toggle --continue flag" role="switch" aria-checked="false">
+                  <span class="toggle-switch"></span>
+                  <span>Continue</span>
+                  <span id="turnCountBadge" class="badge badge-branch" style="display:none;">Turn 1</span>
+                </div>
+
+                <!-- Model Selector Trigger Chip -->
+                <button id="modelSelectorBtn" class="model-chip" type="button" title="Select AI Model" aria-haspopup="dialog" aria-expanded="false" aria-label="Select AI Model">
+                  <svg class="model-chip-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                  </svg>
+                  <span class="model-chip-label">Model:</span>
+                  <span id="selectedModelLabel" class="model-chip-name">Auto</span>
+                  <span class="dropdown-arrow">▼</span>
+                </button>
               </div>
 
               <!-- Execution Mode Selector -->
@@ -324,6 +338,53 @@
             </button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- Model Selector Bottom Sheet Modal -->
+    <div id="modelModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modelSheetTitle">
+      <div class="modal-sheet model-sheet">
+        <div class="sheet-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="brand-logo" style="width:24px; height:24px; background:rgba(99,102,241,0.18); border-color:var(--accent-primary);">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </div>
+            <div>
+              <span id="modelSheetTitle" class="sheet-title">Select Cursor Model</span>
+              <span id="modelCountBadge" class="badge badge-branch" style="margin-left:6px;">Loading...</span>
+            </div>
+          </div>
+          <button id="closeModelModalBtn" class="sheet-close-btn" aria-label="Close model modal">✕</button>
+        </div>
+
+        <div class="sheet-search">
+          <input id="modelSearchInput" class="search-input" type="search" placeholder="Search models (e.g. sonnet, gpt-5, flash, codex)...">
+        </div>
+
+        <!-- Provider filter chips -->
+        <div class="model-filter-bar">
+          <button type="button" class="model-filter-chip active" data-filter="all">All</button>
+          <button type="button" class="model-filter-chip" data-filter="Anthropic">Claude</button>
+          <button type="button" class="model-filter-chip" data-filter="OpenAI">OpenAI</button>
+          <button type="button" class="model-filter-chip" data-filter="Google">Gemini</button>
+          <button type="button" class="model-filter-chip" data-filter="xAI">Grok</button>
+          <button type="button" class="model-filter-chip" data-filter="custom">Custom</button>
+        </div>
+
+        <!-- Custom Model Input Section -->
+        <div id="customModelSection" class="custom-model-card">
+          <div class="custom-model-label">Or enter any custom model / parameterized override:</div>
+          <div class="custom-model-row">
+            <input id="customModelInput" class="custom-model-input" type="text" placeholder="e.g. claude-opus-4-8[context=1m,effort=high]">
+            <button id="applyCustomModelBtn" class="primary-sm-btn" type="button">Apply</button>
+          </div>
+        </div>
+
+        <!-- Scrollable Model List Container -->
+        <div id="modelListContainer" class="sheet-content model-list-container"></div>
       </div>
     </div>
 
