@@ -255,12 +255,18 @@ export class AgentServer {
       // 5b. Models list: /api/models
       if (pathname === '/api/models' && method === 'GET') {
         const refresh = parsedUrl.searchParams.get('refresh') === 'true';
-        const models = await this.processManager.getAvailableModels({ refresh });
-        return this.sendJson(res, 200, {
-          count: models.length,
-          models,
-          default: 'auto'
-        });
+        try {
+          const models = await this.processManager.getAvailableModels({ refresh });
+          return this.sendJson(res, 200, {
+            count: models.length,
+            models,
+            default: 'auto'
+          });
+        } catch (err) {
+          return this.sendJson(res, 502, {
+            error: err.message || 'Failed to retrieve available models from Cursor CLI'
+          });
+        }
       }
 
       // 6. Process Execution: /api/run

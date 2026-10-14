@@ -24,6 +24,8 @@ class CursorDeckApp {
     const savedModel = localStorage.getItem('cursor_selected_model');
     this.currentModel = savedModel || 'auto';
     this.availableModels = [];
+    this.modelsLoading = false;
+    this.modelsError = null;
     this.modelFilter = 'all';
     this.modelSearchQuery = '';
 
@@ -76,6 +78,7 @@ class CursorDeckApp {
     this.modelSearchInput = document.getElementById('modelSearchInput');
     this.modelListContainer = document.getElementById('modelListContainer');
     this.modelCountBadge = document.getElementById('modelCountBadge');
+    this.refreshModelsBtn = document.getElementById('refreshModelsBtn');
     this.modelFilterChips = document.querySelectorAll('.model-filter-chip');
     this.customModelInput = document.getElementById('customModelInput');
     this.applyCustomModelBtn = document.getElementById('applyCustomModelBtn');
@@ -260,6 +263,9 @@ class CursorDeckApp {
     // Model Selector Modal
     if (this.modelSelectorBtn) {
       this.modelSelectorBtn.addEventListener('click', () => this.openModelModal());
+    }
+    if (this.refreshModelsBtn) {
+      this.refreshModelsBtn.addEventListener('click', () => this.loadModels({ refresh: true }));
     }
     if (this.closeModelModalBtn) {
       this.closeModelModalBtn.addEventListener('click', () => this.closeModelModal());
@@ -779,34 +785,34 @@ class CursorDeckApp {
   /* --------------------------------------------------------------------------
      Model Selection Controls & Modal
      -------------------------------------------------------------------------- */
-  async loadModels() {
-    try {
-      const res = await fetch('/api/models');
-      if (res.ok) {
-        const data = await res.json();
-        this.availableModels = data.models || [];
-      } else {
-        this.availableModels = this.getFallbackModels();
-      }
-    } catch (err) {
-      this.availableModels = this.getFallbackModels();
+  async loadModels({ refresh = false } = {}) {
+    this.modelsLoading = true;
+    this.modelsError = null;
+    if (this.modelCountBadge) {
+      this.modelCountBadge.textContent = 'Loading...';
+      this.modelCountBadge.className = 'badge badge-branch';
     }
-    this.updateModelUI();
-  }
+    this.renderModelList();
 
-  getFallbackModels() {
-    return [
-      { id: 'auto', name: 'Auto (Default)', provider: 'Cursor', isDefault: true },
-      { id: 'claude-sonnet-5-thinking-high', name: 'Claude Sonnet 5 1M Thinking', provider: 'Anthropic', isDefault: false },
-      { id: 'claude-4.5-sonnet', name: 'Claude Sonnet 4.5', provider: 'Anthropic', isDefault: false },
-      { id: 'claude-opus-4-7-thinking-high', name: 'Claude Opus 4.7 1M High Thinking', provider: 'Anthropic', isDefault: false },
-      { id: 'gpt-5.3-codex', name: 'Codex 5.3', provider: 'OpenAI', isDefault: false },
-      { id: 'gpt-5.2', name: 'GPT-5.2', provider: 'OpenAI', isDefault: false },
-      { id: 'gpt-5-mini', name: 'GPT-5 Mini', provider: 'OpenAI', isDefault: false },
-      { id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', provider: 'Google', isDefault: false },
-      { id: 'gemini-3.7-flash-high', name: 'Gemini 3.7 Flash', provider: 'Google', isDefault: false },
-      { id: 'cursor-grok-4.5-high', name: 'Grok 4.5', provider: 'xAI', isDefault: false }
-    ];
+    try {
+      const url = refresh ? '/api/models?refresh=true' : '/api/models';
+      const res = await fetch(url);
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}: Failed to load models`);
+      }
+
+      this.availableModels = data.models || [];
+      this.modelsError = null;
+    } catch (err) {
+      this.availableModels = [];
+      this.modelsError = err.message || 'Failed to retrieve models from Cursor CLI';
+    } finally {
+      this.modelsLoading = false;
+      this.updateModelUI();
+      this.renderModelList();
+    }
   }
 
   openModelModal() {
@@ -815,7 +821,11 @@ class CursorDeckApp {
     this.modelSearchQuery = '';
     this.modelFilter = 'all';
     this.updateModelFilterChips();
-    this.renderModelList();
+    if (this.availableModels.length === 0 && !this.modelsLoading) {
+      this.loadModels();
+    } else {
+      this.renderModelList();
+    }
     setTimeout(() => this.modelSearchInput?.focus(), 50);
   }
 
@@ -861,13 +871,56 @@ class CursorDeckApp {
     }
 
     if (this.modelSelectorBtn) {
-      this.modelSelectorBtn.title = isAuto ? 'Model: Auto (Cursor Agent default)' : `Model: ${this.currentModel}`;
+      if (this.modelsError && this.availableModels.length === 0) {
+        this.modelSelectorBtn.title = `Model error: ${this.modelsError}. Click to retry.`;
+      } else {
+        this.modelSelectorBtn.title = isAuto ? 'Model: Auto (Cursor Agent default)' : `Model: ${this.currentModel}`;
+      }
       this.modelSelectorBtn.classList.toggle('has-custom-model', !isAuto);
     }
   }
 
   renderModelList() {
     if (!this.modelListContainer) return;
+
+    // Loading State
+    if (this.modelsLoading) {
+      if (this.modelCountBadge) {
+        this.modelCountBadge.textContent = 'Loading...';
+        this.modelCountBadge.className = 'badge badge-branch';
+      }
+      this.modelListContainer.innerHTML = `
+        <div class="models-loading-card">
+          <div class="banner-spinner" style="width:24px; height:24px; border-width:3px; border-top-color:var(--accent-primary);"></div>
+          <div>Querying available models dynamically from Cursor CLI...</div>
+        </div>
+      `;
+      return;
+    }
+
+    // Error State with Try Again option
+    if (this.modelsError) {
+      if (this.modelCountBadge) {
+        this.modelCountBadge.textContent = 'Error';
+        this.modelCountBadge.className = 'badge badge-error';
+      }
+      this.modelListContainer.innerHTML = `
+        <div class="models-error-card">
+          <div class="models-error-icon">⚠️</div>
+          <div class="models-error-title">Failed to Retrieve Models</div>
+          <div class="models-error-desc">${this.escape(this.modelsError)}</div>
+          <button id="retryModelsBtn" type="button" class="primary-sm-btn" style="padding: 8px 18px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+            <span>Try Again</span>
+          </button>
+        </div>
+      `;
+      const retryBtn = this.modelListContainer.querySelector('#retryModelsBtn');
+      if (retryBtn) {
+        retryBtn.addEventListener('click', () => this.loadModels({ refresh: true }));
+      }
+      return;
+    }
 
     let filtered = [...this.availableModels];
 
@@ -888,6 +941,7 @@ class CursorDeckApp {
 
     if (this.modelCountBadge) {
       this.modelCountBadge.textContent = `${filtered.length} models`;
+      this.modelCountBadge.className = 'badge badge-branch';
     }
 
     if (filtered.length === 0) {

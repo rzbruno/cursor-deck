@@ -9,6 +9,7 @@ import { ProjectManager } from '../src/project-manager.js';
 import { SseHub } from '../src/sse-hub.js';
 import { GitManager } from '../src/git-manager.js';
 import { AgentServer } from '../src/server.js';
+import { ProcessManager } from '../src/process-manager.js';
 
 test('ansi-parser: strips ANSI sequences cleanly', () => {
   const input = '\x1b[32m✔ Success\x1b[0m \x1b[1mBold Text\x1b[0m\r\n';
@@ -420,7 +421,7 @@ test('process-manager: handles model selection, parsing, and provider detection'
     rootDir: '/home/user/code',
     port: 4895,
     host: '127.0.0.1',
-    agentCmd: 'node'
+    agentCmd: 'agent'
   });
 
   const procMgr = pm.processManager;
@@ -469,6 +470,15 @@ Tip: use --model <id> to switch.
   assert.ok(Array.isArray(models));
   assert.ok(models.length > 0);
 
+  // Discards fallback models: throws error if CLI fails
+  const failingProcMgr = new ProcessManager({ agentCmd: 'non-existent-agent-cmd-xyz' });
+  await assert.rejects(
+    async () => {
+      await failingProcMgr.getAvailableModels();
+    },
+    /Failed to retrieve models from Cursor CLI/
+  );
+
   procMgr.activeTask = null;
 });
 
@@ -494,6 +504,32 @@ test('server: GET /api/models returns 200 with available model list', async () =
     assert.ok(Array.isArray(data.models));
     assert.equal(data.default, 'auto');
     assert.ok(data.models.some(m => m.id === 'auto'));
+  } finally {
+    await server.stop();
+    await fs.rm(testRoot, { recursive: true, force: true });
+  }
+});
+
+test('server: GET /api/models returns 502 when Cursor CLI fails', async () => {
+  const testRoot = path.join('/home/user/code', 'test-models-fail-' + Date.now());
+  await fs.mkdir(testRoot, { recursive: true });
+
+  const server = new AgentServer({
+    rootDir: testRoot,
+    port: 4897,
+    host: '127.0.0.1',
+    agentCmd: 'non-existent-agent-cmd-xyz'
+  });
+
+  try {
+    await server.start();
+
+    const res = await fetch('http://127.0.0.1:4897/api/models');
+    assert.equal(res.status, 502);
+
+    const data = await res.json();
+    assert.ok(data.error);
+    assert.match(data.error, /Failed to retrieve models from Cursor CLI/);
   } finally {
     await server.stop();
     await fs.rm(testRoot, { recursive: true, force: true });

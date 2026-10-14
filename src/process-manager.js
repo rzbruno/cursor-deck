@@ -78,7 +78,8 @@ export class ProcessManager {
   }
 
   /**
-   * Fetch available models from Cursor CLI or fallback list
+   * Fetch available models dynamically from Cursor CLI.
+   * Throws an error if Cursor CLI fails or returns no models.
    */
   async getAvailableModels({ refresh = false } = {}) {
     if (!refresh && this.cachedModels && this.cachedModels.length > 0) {
@@ -87,26 +88,27 @@ export class ProcessManager {
 
     try {
       const models = await new Promise((resolve, reject) => {
-        execFile(this.agentCmd, ['--list-models'], { timeout: 10000 }, (error, stdout) => {
+        execFile(this.agentCmd, ['--list-models'], { timeout: 10000 }, (error, stdout, stderr) => {
           if (error) {
-            return reject(error);
+            const detail = (stderr && stderr.trim()) || error.message;
+            return reject(new Error(`Failed to retrieve models from Cursor CLI (${this.agentCmd} --list-models): ${detail}`));
           }
           const parsed = this.parseModelsOutput(stdout);
-          if (parsed && parsed.length > 0) {
-            resolve(parsed);
-          } else {
-            resolve(this.getDefaultFallbackModels());
+          const realModels = parsed.filter(m => m.id !== 'auto');
+          if (realModels.length === 0) {
+            return reject(new Error(`Cursor CLI (${this.agentCmd} --list-models) returned no models.`));
           }
+          resolve(parsed);
         });
       });
 
       this.cachedModels = models;
       return models;
     } catch (err) {
-      // If CLI is not present or command fails, return fallback models
-      const fallback = this.getDefaultFallbackModels();
-      this.cachedModels = fallback;
-      return fallback;
+      if (refresh) {
+        this.cachedModels = null;
+      }
+      throw err;
     }
   }
 
@@ -156,31 +158,14 @@ export class ProcessManager {
   detectModelProvider(id, name) {
     const s = `${id} ${name}`.toLowerCase();
     if (s.includes('claude') || s.includes('sonnet') || s.includes('opus') || s.includes('haiku') || s.includes('fable')) return 'Anthropic';
-    if (s.includes('gpt') || s.includes('codex') || s.includes('o1') || s.includes('o3') || s.includes('o4')) return 'OpenAI';
+    if (s.includes('gpt') || s.includes('codex') || s.includes('o1') || s.includes('o3') || s.includes('o4') || s.includes('terra') || s.includes('luna')) return 'OpenAI';
     if (s.includes('gemini')) return 'Google';
     if (s.includes('grok')) return 'xAI';
     if (s.includes('kimi')) return 'Moonshot';
     if (s.includes('glm')) return 'Zhipu';
+    if (s.includes('muse')) return 'Muse';
     if (s.includes('composer')) return 'Cursor';
     return 'Other';
-  }
-
-  /**
-   * Fallback models if agent command is unavailable
-   */
-  getDefaultFallbackModels() {
-    return [
-      { id: 'auto', name: 'Auto (Default)', provider: 'Cursor', isDefault: true },
-      { id: 'claude-sonnet-5-thinking-high', name: 'Claude Sonnet 5 1M Thinking', provider: 'Anthropic', isDefault: false },
-      { id: 'claude-4.5-sonnet', name: 'Claude Sonnet 4.5', provider: 'Anthropic', isDefault: false },
-      { id: 'claude-opus-4-7-thinking-high', name: 'Claude Opus 4.7 1M High Thinking', provider: 'Anthropic', isDefault: false },
-      { id: 'gpt-5.3-codex', name: 'Codex 5.3', provider: 'OpenAI', isDefault: false },
-      { id: 'gpt-5.2', name: 'GPT-5.2', provider: 'OpenAI', isDefault: false },
-      { id: 'gpt-5-mini', name: 'GPT-5 Mini', provider: 'OpenAI', isDefault: false },
-      { id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', provider: 'Google', isDefault: false },
-      { id: 'gemini-3.7-flash-high', name: 'Gemini 3.7 Flash', provider: 'Google', isDefault: false },
-      { id: 'cursor-grok-4.5-high', name: 'Grok 4.5', provider: 'xAI', isDefault: false }
-    ];
   }
 
   /**
