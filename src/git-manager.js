@@ -189,6 +189,25 @@ export class GitManager {
       rawDiff = err.stdout || '';
     }
 
+    // If a specific file was requested and git diff returned empty,
+    // check if it's an untracked file and generate diff via --no-index against /dev/null
+    if (filePath && !rawDiff.trim()) {
+      try {
+        const { stdout } = await this.execGit(projectName, [
+          'diff',
+          '--no-index',
+          '--color=never',
+          '--',
+          '/dev/null',
+          filePath
+        ]);
+        rawDiff = stdout;
+      } catch (err) {
+        // git diff --no-index exits with code 1 if differences were found
+        rawDiff = err.stdout || '';
+      }
+    }
+
     // Parse diff into structured files and hunks
     const parsedFiles = this.parseUnifiedDiff(rawDiff);
 
@@ -225,13 +244,17 @@ export class GitManager {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
 
-      if (line.startsWith('diff --git ')) {
+      if (line.startsWith('diff --git ') || line.startsWith('diff --no-index ')) {
         if (currentFile) fileBlocks.push(currentFile);
-        const match = line.match(/^diff --git a\/(.+) b\/(.+)$/);
+        const match = line.match(/^diff --(?:git|no-index) (?:a\/)?([^\s]+) (?:b\/)?([^\s]+)$/);
+        let fileName = 'unknown';
+        if (match) {
+          fileName = (match[2] && match[2] !== '/dev/null') ? match[2] : (match[1] || 'unknown');
+        }
         currentFile = {
           fileA: match ? match[1] : '',
           fileB: match ? match[2] : '',
-          fileName: match ? match[2] : 'unknown',
+          fileName,
           additions: 0,
           deletions: 0,
           hunks: []

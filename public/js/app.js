@@ -28,6 +28,8 @@ class CursorDeckApp {
     this.modelsError = null;
     this.modelFilter = 'all';
     this.modelSearchQuery = '';
+    this.activeDiffFile = null;
+    this.diffRequestId = 0;
 
     this.initElements();
     this.initEventListeners();
@@ -339,7 +341,7 @@ class CursorDeckApp {
 
     // Git Actions
     this.refreshGitBtn.addEventListener('click', () => this.loadGitStatus());
-    this.refreshDiffBtn.addEventListener('click', () => this.loadGitDiff());
+    this.refreshDiffBtn.addEventListener('click', () => this.loadGitDiff(this.activeDiffFile));
     this.stageAllBtn.addEventListener('click', () => this.stageFiles([]));
     this.unstageAllBtn.addEventListener('click', () => this.unstageFiles([]));
     this.commitBtn.addEventListener('click', () => this.commitChanges());
@@ -628,8 +630,9 @@ class CursorDeckApp {
     this.connectEventSource(projectName);
 
     // Refresh Git Status & Diff
+    this.activeDiffFile = null;
     this.loadGitStatus();
-    this.loadGitDiff();
+    this.loadGitDiff(null);
 
     // Check project session
     this.loadSessionInfo();
@@ -1220,9 +1223,9 @@ class CursorDeckApp {
         }
       });
 
-      // Clicking file opens Diff tab
+      // Clicking file opens Diff tab and loads the selected file's diff
       item.addEventListener('click', () => {
-        this.switchTab('diff');
+        this.switchTab('diff', { skipLoad: true });
         this.loadGitDiff(f.path);
       });
 
@@ -1289,27 +1292,80 @@ class CursorDeckApp {
 
   async loadGitDiff(filePath = null) {
     if (!this.currentProject) return;
+    this.activeDiffFile = filePath;
+    const reqId = ++this.diffRequestId;
+
+    if (this.diffStats) {
+      this.diffStats.textContent = filePath
+        ? `Loading diff for ${filePath}...`
+        : 'Calculating diff...';
+    }
+
     try {
       const url = `/api/git/diff?project=${encodeURIComponent(this.currentProject)}${filePath ? `&file=${encodeURIComponent(filePath)}` : ''}`;
       const res = await fetch(url);
       const data = await res.json();
 
+      if (reqId !== this.diffRequestId) {
+        // Discard stale response
+        return;
+      }
+
+      let filterHtml = '';
+      if (filePath) {
+        filterHtml = `
+          <span class="diff-filter-pill" style="display:inline-flex;align-items:center;gap:6px;margin-left:8px;font-size:0.75rem;background:rgba(99,102,241,0.18);border:1px solid rgba(99,102,241,0.35);color:#c7d2fe;padding:2px 8px;border-radius:12px;">
+            <span>📄 ${this.escape(filePath)}</span>
+            <button id="clearDiffFilterBtn" type="button" style="background:none;border:none;color:#fca5a5;cursor:pointer;font-size:0.85rem;padding:0 2px;line-height:1;" title="Show all files">✕</button>
+          </span>
+        `;
+      }
+
       this.diffStats.innerHTML = `
         <span class="diff-add">+${data.stats.additions}</span>
         <span class="diff-del">-${data.stats.deletions}</span>
         <span style="color:var(--text-muted)">across ${data.stats.filesChanged} file${data.stats.filesChanged === 1 ? '' : 's'}</span>
+        ${filterHtml}
       `;
+
+      const clearBtn = this.diffStats.querySelector('#clearDiffFilterBtn');
+      if (clearBtn) {
+        clearBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.loadGitDiff(null);
+        });
+      }
 
       this.renderDiff(data.files);
     } catch (err) {
-      console.error('Git diff error:', err);
+      if (reqId === this.diffRequestId) {
+        console.error('Git diff error:', err);
+        if (this.diffStats) {
+          this.diffStats.textContent = 'Failed to load diff';
+        }
+      }
     }
   }
 
   renderDiff(files) {
     this.diffContainer.innerHTML = '';
     if (!files || files.length === 0) {
-      this.diffContainer.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted)">No uncommitted changes in HEAD</div>';
+      const msg = this.activeDiffFile
+        ? `No uncommitted changes in <code>${this.escape(this.activeDiffFile)}</code>`
+        : 'No uncommitted changes in HEAD';
+      const showAllHtml = this.activeDiffFile
+        ? `<div style="margin-top:12px;"><button id="emptyDiffShowAllBtn" class="tool-btn" type="button">Show All Changes</button></div>`
+        : '';
+      this.diffContainer.innerHTML = `
+        <div style="padding:24px;text-align:center;color:var(--text-muted)">
+          <div>${msg}</div>
+          ${showAllHtml}
+        </div>
+      `;
+      const btn = this.diffContainer.querySelector('#emptyDiffShowAllBtn');
+      if (btn) {
+        btn.addEventListener('click', () => this.loadGitDiff(null));
+      }
       return;
     }
 
@@ -1321,8 +1377,8 @@ class CursorDeckApp {
       f.hunks.forEach(h => {
         hunksHtml += `<div class="diff-line hunk">${this.escape(h.header)}</div>`;
         h.lines.forEach(l => {
-          const typeClass = l.type === 'add' ? 'add' : l.type === 'del' ? 'del' : 'ctx';
-          const prefix = l.type === 'add' ? '+' : l.type === 'del' ? '-' : ' ';
+          const typeClass = l.type === 'add' ? 'add' : l.type === 'del' ? 'del' : l.type === 'meta' ? 'meta' : 'ctx';
+          const prefix = l.type === 'add' ? '+' : l.type === 'del' ? '-' : l.type === 'meta' ? '' : ' ';
           hunksHtml += `<div class="diff-line ${typeClass}">${prefix}${this.escape(l.content)}</div>`;
         });
       });
@@ -1337,6 +1393,8 @@ class CursorDeckApp {
 
       this.diffContainer.appendChild(card);
     });
+
+    this.diffContainer.scrollTop = 0;
   }
 
   async executeEmergencyDiscard() {
@@ -1383,7 +1441,7 @@ class CursorDeckApp {
   /* --------------------------------------------------------------------------
      Tab Navigation
      -------------------------------------------------------------------------- */
-  switchTab(tabName) {
+  switchTab(tabName, { skipLoad = false } = {}) {
     this.navTabs.forEach(t => {
       t.classList.toggle('active', t.dataset.tab === tabName);
     });
@@ -1391,8 +1449,12 @@ class CursorDeckApp {
       p.classList.toggle('active', p.id === `${tabName}Panel`);
     });
 
+    if (skipLoad) return;
     if (tabName === 'status') this.loadGitStatus();
-    if (tabName === 'diff') this.loadGitDiff();
+    if (tabName === 'diff') {
+      this.activeDiffFile = null;
+      this.loadGitDiff(null);
+    }
     if (tabName === 'console' && this.isAutoScrollEnabled) this.scrollToBottom();
   }
 

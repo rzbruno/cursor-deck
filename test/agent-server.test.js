@@ -119,6 +119,22 @@ test('git-manager: parsed diff', () => {
   assert.equal(parsed[0].fileName, 'index.js');
   assert.equal(parsed[0].additions, 2);
   assert.equal(parsed[0].deletions, 1);
+
+  // Untracked / new file diff
+  const untrackedDiff = `diff --git a/new-file.txt b/new-file.txt
+new file mode 100644
+index 0000000..4fdd6db
+--- /dev/null
++++ b/new-file.txt
+@@ -0,0 +1,2 @@
++hello
++world
+`;
+  const parsedUntracked = gm.parseUnifiedDiff(untrackedDiff);
+  assert.equal(parsedUntracked.length, 1);
+  assert.equal(parsedUntracked[0].fileName, 'new-file.txt');
+  assert.equal(parsedUntracked[0].additions, 2);
+  assert.equal(parsedUntracked[0].deletions, 0);
 });
 
 test('server: starts, serves static assets and API correctly', async () => {
